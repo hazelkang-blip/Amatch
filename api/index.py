@@ -9,6 +9,12 @@ AMatch FastAPI 백엔드 (Vercel Python 서버리스 함수).
   GET    /api/results/{id}     저장된 결과 전체 조회
   DELETE /api/results/{id}     저장된 결과 삭제
 """
+import os
+import sys
+
+# 서버리스 환경에서 같은 디렉터리의 모듈(reconcile, db)을 안전하게 import
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel

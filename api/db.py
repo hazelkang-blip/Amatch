@@ -13,10 +13,16 @@ DATABASE_URL = os.environ.get("DATABASE_URL") or os.environ.get("POSTGRES_URL")
 
 _USE_PG = bool(DATABASE_URL)
 _MEM = {}  # 폴백용 메모리 저장소
+psycopg = None
+dict_row = None
 
 if _USE_PG:
-    import psycopg
-    from psycopg.rows import dict_row
+    # psycopg import 실패 시 함수 전체가 죽지 않도록 메모리 저장으로 폴백
+    try:
+        import psycopg
+        from psycopg.rows import dict_row
+    except Exception:
+        _USE_PG = False
 
 
 def _conn():
