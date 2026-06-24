@@ -1,25 +1,18 @@
 """
-정산 결과 저장 계층.
-
-- Postgres 연결 문자열이 환경변수에 있으면 Postgres(Supabase / Neon / Vercel Postgres) 사용.
-- 없으면 메모리 저장(개발용, 서버리스에서는 휘발됨)으로 폴백.
-
-Vercel/Neon/Supabase 마다 주입하는 환경변수 이름이 달라서, 알려진 후보를
-폭넓게 탐색하고 필요하면 구성요소(host/user/...)로 URL을 조립한다.
+정산 결과 저장 계층. (Vercel/Neon/Supabase 환경변수 자동 인식)
 """
 import os
 import json
 import uuid
 from datetime import datetime, timezone
 
-# 다양한 제공자가 쓰는 연결 문자열 환경변수 이름 (우선순위 순)
 _URL_ENV_CANDIDATES = [
     "DATABASE_URL",
     "POSTGRES_URL",
     "DATABASE_URL_UNPOOLED",
     "POSTGRES_URL_NON_POOLING",
     "NEON_DATABASE_URL",
-    "POSTGRES_PRISMA_URL",  # pgbouncer 파라미터 때문에 가장 마지막
+    "POSTGRES_PRISMA_URL",
 ]
 
 
@@ -28,7 +21,6 @@ def _resolve_db_url():
         v = os.environ.get(k)
         if v:
             return v, k
-    # 구성요소로부터 조립
     host = os.environ.get("POSTGRES_HOST") or os.environ.get("PGHOST")
     user = os.environ.get("POSTGRES_USER") or os.environ.get("PGUSER")
     pw = os.environ.get("POSTGRES_PASSWORD") or os.environ.get("PGPASSWORD")
@@ -40,12 +32,11 @@ def _resolve_db_url():
 
 DATABASE_URL, _DB_SOURCE = _resolve_db_url()
 _USE_PG = bool(DATABASE_URL)
-_MEM = {}  # 폴백용 메모리 저장소
+_MEM = {}
 psycopg = None
 dict_row = None
 
 if _USE_PG:
-    # psycopg import 실패 시 함수 전체가 죽지 않도록 메모리 저장으로 폴백
     try:
         import psycopg
         from psycopg.rows import dict_row
@@ -55,7 +46,6 @@ if _USE_PG:
 
 
 def _conn():
-    # sslmode 요구하는 호스트(Supabase/Neon) 대비
     return psycopg.connect(DATABASE_URL, row_factory=dict_row, autocommit=True)
 
 
@@ -149,7 +139,6 @@ def storage_mode():
 
 
 def db_env_report():
-    """진단용: 어떤 DB 환경변수가 존재하는지(이름만) 보고."""
     url_keys = [k for k in _URL_ENV_CANDIDATES if os.environ.get(k)]
     comp_keys = [k for k in ("POSTGRES_HOST", "POSTGRES_USER", "POSTGRES_DATABASE", "PGHOST")
                  if os.environ.get(k)]
