@@ -35,7 +35,7 @@ app.add_middleware(
 
 @app.get("/api/health")
 def health():
-    return {"ok": True, "storage": db.storage_mode()}
+    return {"ok": True, "storage": db.storage_mode(), "db": db.db_env_report()}
 
 
 @app.post("/api/analyze")

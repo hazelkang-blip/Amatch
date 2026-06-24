@@ -1,16 +1,44 @@
 """
 정산 결과 저장 계층.
 
-- DATABASE_URL 환경변수가 있으면 Postgres(Supabase / Neon / Vercel Postgres) 사용.
+- Postgres 연결 문자열이 환경변수에 있으면 Postgres(Supabase / Neon / Vercel Postgres) 사용.
 - 없으면 메모리 저장(개발용, 서버리스에서는 휘발됨)으로 폴백.
+
+Vercel/Neon/Supabase 마다 주입하는 환경변수 이름이 달라서, 알려진 후보를
+폭넓게 탐색하고 필요하면 구성요소(host/user/...)로 URL을 조립한다.
 """
 import os
 import json
 import uuid
 from datetime import datetime, timezone
 
-DATABASE_URL = os.environ.get("DATABASE_URL") or os.environ.get("POSTGRES_URL")
+# 다양한 제공자가 쓰는 연결 문자열 환경변수 이름 (우선순위 순)
+_URL_ENV_CANDIDATES = [
+    "DATABASE_URL",
+    "POSTGRES_URL",
+    "DATABASE_URL_UNPOOLED",
+    "POSTGRES_URL_NON_POOLING",
+    "NEON_DATABASE_URL",
+    "POSTGRES_PRISMA_URL",  # pgbouncer 파라미터 때문에 가장 마지막
+]
 
+
+def _resolve_db_url():
+    for k in _URL_ENV_CANDIDATES:
+        v = os.environ.get(k)
+        if v:
+            return v, k
+    # 구성요소로부터 조립
+    host = os.environ.get("POSTGRES_HOST") or os.environ.get("PGHOST")
+    user = os.environ.get("POSTGRES_USER") or os.environ.get("PGUSER")
+    pw = os.environ.get("POSTGRES_PASSWORD") or os.environ.get("PGPASSWORD")
+    dbn = os.environ.get("POSTGRES_DATABASE") or os.environ.get("PGDATABASE")
+    if host and user and dbn:
+        return f"postgresql://{user}:{pw}@{host}/{dbn}?sslmode=require", "components"
+    return None, None
+
+
+DATABASE_URL, _DB_SOURCE = _resolve_db_url()
 _USE_PG = bool(DATABASE_URL)
 _MEM = {}  # 폴백용 메모리 저장소
 psycopg = None
@@ -21,8 +49,9 @@ if _USE_PG:
     try:
         import psycopg
         from psycopg.rows import dict_row
-    except Exception:
+    except Exception as e:
         _USE_PG = False
+        _DB_SOURCE = f"{_DB_SOURCE} (psycopg import 실패: {e})"
 
 
 def _conn():
@@ -117,3 +146,11 @@ def delete_result(rid):
 
 def storage_mode():
     return "postgres" if _USE_PG else "memory"
+
+
+def db_env_report():
+    """진단용: 어떤 DB 환경변수가 존재하는지(이름만) 보고."""
+    url_keys = [k for k in _URL_ENV_CANDIDATES if os.environ.get(k)]
+    comp_keys = [k for k in ("POSTGRES_HOST", "POSTGRES_USER", "POSTGRES_DATABASE", "PGHOST")
+                 if os.environ.get(k)]
+    return {"source": _DB_SOURCE, "url_keys_present": url_keys, "component_keys_present": comp_keys}
