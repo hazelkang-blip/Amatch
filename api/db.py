@@ -33,6 +33,7 @@ def _resolve_db_url():
 DATABASE_URL, _DB_SOURCE = _resolve_db_url()
 _USE_PG = bool(DATABASE_URL)
 _MEM = {}
+_MEM_AUDIT = []  # 폴백용 감사 로그
 psycopg = None
 dict_row = None
 
@@ -65,6 +66,54 @@ def init_db():
             )
             """
         )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS audit_log (
+                id        BIGSERIAL PRIMARY KEY,
+                ts        TIMESTAMPTZ NOT NULL DEFAULT now(),
+                action    TEXT,
+                result_id TEXT,
+                ip        TEXT,
+                detail    TEXT
+            )
+            """
+        )
+
+
+def log_action(action, result_id=None, ip=None, detail=None):
+    """감사 로그 기록 (저장/열람/삭제/목록 등)."""
+    now = datetime.now(timezone.utc)
+    if not _USE_PG:
+        _MEM_AUDIT.append({
+            "ts": now.isoformat(), "action": action,
+            "result_id": result_id, "ip": ip, "detail": detail,
+        })
+        return
+    try:
+        init_db()
+        with _conn() as conn:
+            conn.execute(
+                "INSERT INTO audit_log (ts, action, result_id, ip, detail) VALUES (%s, %s, %s, %s, %s)",
+                (now, action, result_id, ip, detail),
+            )
+    except Exception:
+        pass  # 감사 로그 실패가 본 기능을 막지 않도록
+
+
+def list_audit(limit=200):
+    if not _USE_PG:
+        return list(reversed(_MEM_AUDIT))[:limit]
+    init_db()
+    with _conn() as conn:
+        cur = conn.execute(
+            "SELECT ts, action, result_id, ip, detail FROM audit_log ORDER BY ts DESC LIMIT %s",
+            (limit,),
+        )
+        rows = cur.fetchall()
+    for r in rows:
+        if isinstance(r.get("ts"), datetime):
+            r["ts"] = r["ts"].isoformat()
+    return rows
 
 
 def save_result(payload, label=None):

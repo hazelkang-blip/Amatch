@@ -53,9 +53,13 @@ for _cidr in os.environ.get("ALLOWED_IPS", "").split(","):
 
 
 def _client_ip(request: Request) -> str:
+    # 사내망 제한: 사내 프록시가 x-forwarded-for 앞쪽에 넣는 내부 클라이언트 IP(172.x)로 판정.
     xff = request.headers.get("x-forwarded-for", "")
     if xff:
         return xff.split(",")[0].strip()
+    ip = request.headers.get("x-real-ip", "").strip()
+    if ip:
+        return ip
     return request.client.host if request.client else ""
 
 
@@ -80,13 +84,17 @@ async def ip_allowlist(request: Request, call_next):
 
 
 @app.get("/api/health")
-def health():
+def health(request: Request):
     return {
         "ok": True,
         "storage": db.storage_mode(),
         "db": db.db_env_report(),
         "ip_guard": bool(ALLOWED_NETWORKS),
         "allowed_networks": [str(n) for n in ALLOWED_NETWORKS],
+        # 허용목록에 넣어야 할 "지금 접속한 공인 IP" 진단용
+        "your_ip": _client_ip(request),
+        "x_real_ip": request.headers.get("x-real-ip", ""),
+        "x_forwarded_for": request.headers.get("x-forwarded-for", ""),
     }
 
 
@@ -124,27 +132,37 @@ class SaveBody(BaseModel):
 
 
 @app.post("/api/results")
-def save(body: SaveBody):
+def save(body: SaveBody, request: Request):
     if not body.payload:
         raise HTTPException(status_code=400, detail="저장할 결과가 없습니다.")
-    return db.save_result(body.payload, body.label)
+    saved = db.save_result(body.payload, body.label)
+    db.log_action("save", saved.get("id"), _client_ip(request), saved.get("label"))
+    return saved
 
 
 @app.get("/api/results")
-def results():
+def results(request: Request):
+    db.log_action("list", None, _client_ip(request))
     return db.list_results()
 
 
 @app.get("/api/results/{rid}")
-def result_detail(rid: str):
+def result_detail(rid: str, request: Request):
     payload = db.get_result(rid)
     if payload is None:
         raise HTTPException(status_code=404, detail="결과를 찾을 수 없습니다.")
+    db.log_action("view", rid, _client_ip(request))
     return payload
 
 
 @app.delete("/api/results/{rid}")
-def remove(rid: str):
+def remove(rid: str, request: Request):
     if not db.delete_result(rid):
         raise HTTPException(status_code=404, detail="결과를 찾을 수 없습니다.")
+    db.log_action("delete", rid, _client_ip(request))
     return {"ok": True, "deleted": rid}
+
+
+@app.get("/api/audit")
+def audit(request: Request, limit: int = 200):
+    return db.list_audit(limit)

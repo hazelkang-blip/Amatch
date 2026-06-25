@@ -153,6 +153,17 @@ const won = (v) => (v == null ? "-" : Math.round(v).toLocaleString("ko-KR") + "�
 const num = (v) => (v == null ? "-" : Math.round(v).toLocaleString("ko-KR"));
 const esc = (s) => String(s ?? "").replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
 
+// ---------- ID 마스킹 ----------
+let MASK_IDS = true; // 기본: 민감 ID 가림
+const ID_COLUMNS = new Set(["결제번호", "계정 ID", "User ID", "결제ID"]);
+function maskId(v) {
+  const s = String(v ?? "").trim();
+  if (!s || s === "-" || s === "0") return s;
+  if (s.length <= 4) return s[0] + "*".repeat(Math.max(1, s.length - 1));
+  return s.slice(0, 2) + "*".repeat(Math.max(2, s.length - 4)) + s.slice(-2);
+}
+function toggleMask() { MASK_IDS = !MASK_IDS; renderTab(); }
+
 function showMsg(text, type = "info") {
   $("#msg").innerHTML = `<div class="alert ${type}">${esc(text)}</div>`;
   if (type === "success") setTimeout(() => { $("#msg").innerHTML = ""; }, 4000);
@@ -199,6 +210,8 @@ function recordsTable(rows, columns, opts = {}) {
       } else if (moneyCols.includes(c)) {
         const cls = colorCols.includes(c) ? signClass(v) : "";
         h += `<td class="${cls}">${num(v)}</td>`;
+      } else if (ID_COLUMNS.has(c) && MASK_IDS) {
+        h += `<td style="text-align:left" title="보호된 ID">${esc(maskId(v))}</td>`;
       } else {
         h += `<td style="text-align:left">${esc(v)}</td>`;
       }
@@ -240,8 +253,11 @@ function renderDashboard() {
   const tabs = ["📊 AXZ 정산", "🔄 PG", "🧾 현금영수증", "🏢 세금계산서", "💡 정산 제외"];
   let h = `<div class="card" style="display:flex;justify-content:space-between;align-items:center">
       <div><strong>정산 대상월: ${esc(d.target_month)}</strong> <span class="muted">· 생성 ${esc(d.generated_at || "")}</span></div>
-      <div style="display:flex;gap:0.5rem">
-        <input type="text" id="save-label" placeholder="저장 이름(선택)" style="width:200px" />
+      <div style="display:flex;gap:0.5rem;align-items:center">
+        <label style="display:flex;align-items:center;gap:4px;font-size:0.8rem;color:#64748b;cursor:pointer">
+          <input type="checkbox" ${MASK_IDS ? "" : "checked"} onchange="toggleMask()" /> ID 전체 표시
+        </label>
+        <input type="text" id="save-label" placeholder="저장 이름(선택)" style="width:180px" />
         <button class="btn-primary btn-sm" style="width:auto" id="btn-save" onclick="saveResult()">💾 결과 저장</button>
       </div>
     </div>`;
