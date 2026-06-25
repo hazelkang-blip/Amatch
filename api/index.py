@@ -2,21 +2,28 @@
 AMatch FastAPI 백엔드 (Vercel Python 서버리스 함수).
 
 엔드포인트
-  GET    /api/health           상태/저장소 모드 확인
+  GET    /api/health           상태/저장소 모드 확인 (IP 제한 제외 - 모니터링용)
   POST   /api/analyze          파일 업로드 → 정산 대사 실행(저장 안 함)
   POST   /api/results          분석 결과 저장
   GET    /api/results          저장된 결과 목록
   GET    /api/results/{id}     저장된 결과 전체 조회
   DELETE /api/results/{id}     저장된 결과 삭제
+
+보안
+  - ALLOWED_IPS 환경변수(쉼표 구분 CIDR)에 사내망 대역을 넣으면,
+    /api/* (health 제외)는 해당 대역에서만 접근 가능. 비워두면 제한 없음.
+  - CORS 는 ALLOWED_ORIGIN(기본: 배포 도메인)만 허용.
 """
 import os
 import sys
+import ipaddress
 
 # 서버리스 환경에서 같은 디렉터리의 모듈(reconcile, db)을 안전하게 import
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import List, Optional
 
@@ -25,17 +32,62 @@ import db
 
 app = FastAPI(title="AMatch 정산 대사 API")
 
+# --- CORS: 자기 도메인만 허용 ---
+ALLOWED_ORIGIN = os.environ.get("ALLOWED_ORIGIN", "https://amatch-psi.vercel.app")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[ALLOWED_ORIGIN],
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# --- IP 허용목록 (사내망 제한) ---
+ALLOWED_NETWORKS = []
+for _cidr in os.environ.get("ALLOWED_IPS", "").split(","):
+    _cidr = _cidr.strip()
+    if _cidr:
+        try:
+            ALLOWED_NETWORKS.append(ipaddress.ip_network(_cidr, strict=False))
+        except ValueError:
+            pass  # 잘못된 CIDR 은 무시
+
+
+def _client_ip(request: Request) -> str:
+    xff = request.headers.get("x-forwarded-for", "")
+    if xff:
+        return xff.split(",")[0].strip()
+    return request.client.host if request.client else ""
+
+
+@app.middleware("http")
+async def ip_allowlist(request: Request, call_next):
+    path = request.url.path
+    # 민감 데이터가 오가는 /api/* 만 보호. health 는 모니터링 위해 제외.
+    if ALLOWED_NETWORKS and path.startswith("/api/") and path != "/api/health":
+        ip = _client_ip(request)
+        allowed = False
+        try:
+            addr = ipaddress.ip_address(ip)
+            allowed = any(addr in net for net in ALLOWED_NETWORKS)
+        except ValueError:
+            allowed = False
+        if not allowed:
+            return JSONResponse(
+                status_code=403,
+                content={"detail": f"허용되지 않은 네트워크에서의 접근입니다. (IP: {ip})"},
+            )
+    return await call_next(request)
+
 
 @app.get("/api/health")
 def health():
-    return {"ok": True, "storage": db.storage_mode(), "db": db.db_env_report()}
+    return {
+        "ok": True,
+        "storage": db.storage_mode(),
+        "db": db.db_env_report(),
+        "ip_guard": bool(ALLOWED_NETWORKS),
+        "allowed_networks": [str(n) for n in ALLOWED_NETWORKS],
+    }
 
 
 @app.post("/api/analyze")
