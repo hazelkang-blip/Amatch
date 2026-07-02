@@ -90,7 +90,6 @@
     <p class="sub">정산 대사 시스템</p>
     <div class="nav-item active" data-page="setup">📂 데이터 세팅</div>
     <div class="nav-item" data-page="dashboard">📊 정산 대시보드</div>
-    <div class="nav-item" data-page="saved">💾 저장된 정산결과</div>
   </aside>
 
   <main class="main">
@@ -136,9 +135,6 @@
 
     <!-- 화면 2: 대시보드 -->
     <section id="page-dashboard" class="hidden"></section>
-
-    <!-- 화면 3: 저장된 결과 -->
-    <section id="page-saved" class="hidden"></section>
   </main>
 </div>
 
@@ -152,17 +148,6 @@ const $ = (s) => document.querySelector(s);
 const won = (v) => (v == null ? "-" : Math.round(v).toLocaleString("ko-KR") + "원");
 const num = (v) => (v == null ? "-" : Math.round(v).toLocaleString("ko-KR"));
 const esc = (s) => String(s ?? "").replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
-
-// ---------- ID 마스킹 ----------
-let MASK_IDS = true; // 기본: 민감 ID 가림
-const ID_COLUMNS = new Set(["결제번호", "계정 ID", "User ID", "결제ID"]);
-function maskId(v) {
-  const s = String(v ?? "").trim();
-  if (!s || s === "-" || s === "0") return s;
-  if (s.length <= 4) return s[0] + "*".repeat(Math.max(1, s.length - 1));
-  return s.slice(0, 2) + "*".repeat(Math.max(2, s.length - 4)) + s.slice(-2);
-}
-function toggleMask() { MASK_IDS = !MASK_IDS; renderTab(); }
 
 function showMsg(text, type = "info") {
   $("#msg").innerHTML = `<div class="alert ${type}">${esc(text)}</div>`;
@@ -210,8 +195,6 @@ function recordsTable(rows, columns, opts = {}) {
       } else if (moneyCols.includes(c)) {
         const cls = colorCols.includes(c) ? signClass(v) : "";
         h += `<td class="${cls}">${num(v)}</td>`;
-      } else if (ID_COLUMNS.has(c) && MASK_IDS) {
-        h += `<td style="text-align:left" title="보호된 ID">${esc(maskId(v))}</td>`;
       } else {
         h += `<td style="text-align:left">${esc(v)}</td>`;
       }
@@ -241,7 +224,7 @@ function renderDashboard() {
   const sec = $("#page-dashboard");
   if (!currentResult) {
     sec.innerHTML = `<div class="empty"><div class="t">데이터 등록 필요</div>
-      <p class="muted">대사 진행을 위해 데이터를 먼저 등록하거나 저장된 결과를 불러오세요.</p>
+      <p class="muted">대사 진행을 위해 데이터를 먼저 등록해주세요.</p>
       <button class="btn-primary" style="max-width:260px;margin:1rem auto 0" onclick="go('setup')">✨ 데이터 등록하러 가기</button></div>`;
     return;
   }
@@ -251,15 +234,9 @@ function renderDashboard() {
   const dr = s.diff_rec, drStr = (dr > 0 ? "+" : "") + num(dr) + "원";
 
   const tabs = ["📊 AXZ 정산", "🔄 PG", "🧾 현금영수증", "🏢 세금계산서", "💡 정산 제외"];
-  let h = `<div class="card" style="display:flex;justify-content:space-between;align-items:center">
+  let h = `<div class="card" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.5rem">
       <div><strong>정산 대상월: ${esc(d.target_month)}</strong> <span class="muted">· 생성 ${esc(d.generated_at || "")}</span></div>
-      <div style="display:flex;gap:0.5rem;align-items:center">
-        <label style="display:flex;align-items:center;gap:4px;font-size:0.8rem;color:#64748b;cursor:pointer">
-          <input type="checkbox" ${MASK_IDS ? "" : "checked"} onchange="toggleMask()" /> ID 전체 표시
-        </label>
-        <input type="text" id="save-label" placeholder="저장 이름(선택)" style="width:180px" />
-        <button class="btn-primary btn-sm" style="width:auto" id="btn-save" onclick="saveResult()">💾 결과 저장</button>
-      </div>
+      <button class="btn-primary btn-sm" style="width:auto" id="btn-export" onclick="exportExcel()">📊 엑셀 다운로드</button>
     </div>`;
 
   h += `<h3>📊 정산 총괄 요약</h3><div class="metrics">
@@ -281,11 +258,9 @@ function renderTab() {
   if (!b) return;
   if (activeTab === 0) {
     b.innerHTML = `<h3>전체 증빙 신청 현황</h3>${pivotTable(d.pivot_all)}
-      <div class="row" style="margin-top:1rem">
-        <div class="col"><h3>결제완료 내역</h3>${pivotTable(d.pivot_success)}
-          <h3>부분취소 내역</h3>${pivotTable(d.pivot_partial)}</div>
-        <div class="col"><h3>취소완료 내역</h3>${pivotTable(d.pivot_cancel)}</div>
-      </div>`;
+      <h3>결제완료 내역</h3>${pivotTable(d.pivot_success)}
+      <h3>취소완료 내역</h3>${pivotTable(d.pivot_cancel)}
+      <h3>부분취소 내역</h3>${pivotTable(d.pivot_partial)}`;
   } else if (activeTab === 1) {
     b.innerHTML = `<h3>결제유형별 PG 요약</h3>${pivotTable({ columns: ["결제유형", "최종매출인식금액", "결제금액", "차액"], rows: d.pg_summary })}
       <h3>결제번호 기준 상세 불일치 (원본 대사)</h3>
@@ -331,76 +306,6 @@ function recRecTable(d) {
     { moneyCols: ["AXZ", "카카오원본", "차액"], colorCols: ["차액"], badgeCol: "사유", badgeMap: REC_BADGE });
 }
 
-// ---------- 저장된 결과 ----------
-async function renderSaved() {
-  const sec = $("#page-saved");
-  sec.innerHTML = '<h3>💾 저장된 정산결과</h3><p class="muted">불러오는 중...</p>';
-  try {
-    const res = await fetch(`${API}/api/results`);
-    const list = await res.json();
-    if (!Array.isArray(list) || !list.length) {
-      sec.innerHTML = `<h3>💾 저장된 정산결과</h3><div class="empty"><div class="t">저장된 결과 없음</div>
-        <p class="muted">대시보드에서 분석 후 '결과 저장'을 눌러주세요.</p></div>`;
-      return;
-    }
-    let h = '<h3>💾 저장된 정산결과</h3>';
-    list.forEach(r => {
-      const s = r.summary || {};
-      h += `<div class="saved-item">
-        <div>
-          <div class="name">${esc(r.label || r.target_month)}</div>
-          <div class="meta">정산월 ${esc(r.target_month)} · 저장 ${esc((r.created_at || "").replace("T", " ").slice(0, 16))}
-            · 최종차액 ${won(s.main_diff)} · 발행차액 ${won(s.diff_rec)}</div>
-        </div>
-        <div style="display:flex;gap:0.5rem">
-          <button class="btn-outline btn-sm" onclick="loadResult('${r.id}')">불러오기</button>
-          <button class="btn-danger btn-sm" onclick="deleteResult('${r.id}','${esc(r.label || r.target_month)}')">삭제</button>
-        </div>
-      </div>`;
-    });
-    sec.innerHTML = h;
-  } catch (e) {
-    sec.innerHTML = `<h3>💾 저장된 정산결과</h3><div class="alert error">목록 조회 실패: ${esc(e.message)}</div>`;
-  }
-}
-
-async function loadResult(id) {
-  try {
-    const res = await fetch(`${API}/api/results/${id}`);
-    if (!res.ok) throw new Error("불러오기 실패");
-    currentResult = await res.json();
-    activeTab = 0;
-    go("dashboard");
-    showMsg("저장된 결과를 불러왔습니다.", "success");
-  } catch (e) { showMsg(e.message, "error"); }
-}
-
-async function deleteResult(id, name) {
-  if (!confirm(`'${name}' 결과를 삭제할까요?`)) return;
-  try {
-    const res = await fetch(`${API}/api/results/${id}`, { method: "DELETE" });
-    if (!res.ok) throw new Error("삭제 실패");
-    showMsg("삭제되었습니다.", "success");
-    renderSaved();
-  } catch (e) { showMsg(e.message, "error"); }
-}
-
-async function saveResult() {
-  if (!currentResult) return;
-  const btn = $("#btn-save");
-  const label = ($("#save-label") || {}).value || "";
-  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> 저장 중';
-  try {
-    const res = await fetch(`${API}/api/results`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ label, payload: currentResult }),
-    });
-    if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.detail || "저장 실패"); }
-    showMsg("정산 결과가 저장되었습니다.", "success");
-  } catch (e) { showMsg(e.message, "error"); }
-  finally { btn.disabled = false; btn.innerHTML = "💾 결과 저장"; }
-}
-
 // ---------- 분석 ----------
 async function analyze() {
   const files = { bill: $("#f-bill").files[0], sap: $("#f-sap").files[0], rec: $("#f-rec").files[0], axz: $("#f-axz").files[0] };
@@ -424,12 +329,39 @@ async function analyze() {
   finally { btn.disabled = false; btn.innerHTML = "🚀 데이터 분석 및 대사 시작"; }
 }
 
+// ---------- 엑셀 다운로드 ----------
+async function exportExcel() {
+  const files = { bill: $("#f-bill").files[0], sap: $("#f-sap").files[0], rec: $("#f-rec").files[0], axz: $("#f-axz").files[0] };
+  if (!files.bill || !files.sap || !files.rec || !files.axz) {
+    showMsg("엑셀 생성을 위해 '데이터 세팅'에서 원본 파일을 다시 선택한 뒤 분석해주세요.", "error");
+    return;
+  }
+  const tm = currentResult ? currentResult.target_month : `${$("#sel-year").value}-${String($("#sel-month").value).padStart(2, "0")}`;
+  const fd = new FormData();
+  fd.append("bill", files.bill); fd.append("sap", files.sap); fd.append("rec", files.rec); fd.append("axz", files.axz);
+  for (const f of $("#f-pg").files) fd.append("pg_files", f);
+
+  const btn = $("#btn-export");
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> 엑셀 생성 중...';
+  try {
+    const res = await fetch(`${API}/api/export?target_month=${tm}`, { method: "POST", body: fd });
+    if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.detail || `오류 (${res.status})`); }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `AMatch_정산_${tm}.xlsx`;
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+    showMsg("엑셀 파일을 다운로드했습니다.", "success");
+  } catch (e) { showMsg("⚠️ " + e.message, "error"); }
+  finally { btn.disabled = false; btn.innerHTML = "📊 엑셀 다운로드"; }
+}
+
 // ---------- 네비게이션 ----------
 function go(page) {
   document.querySelectorAll(".nav-item").forEach(n => n.classList.toggle("active", n.dataset.page === page));
-  ["setup", "dashboard", "saved"].forEach(p => $("#page-" + p).classList.toggle("hidden", p !== page));
+  ["setup", "dashboard"].forEach(p => $("#page-" + p).classList.toggle("hidden", p !== page));
   if (page === "dashboard") renderDashboard();
-  if (page === "saved") renderSaved();
 }
 
 // ---------- 초기화 ----------
