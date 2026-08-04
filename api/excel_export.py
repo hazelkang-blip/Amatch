@@ -298,11 +298,20 @@ def build_workbook(*, bill, sap, rec, axz, pg_files=None, target_month_str):
     wse = wb.create_sheet("정산제외")
     _title(wse, 1, "정산 제외 (구다음메일 결제건)")
     old = pd.DataFrame(res["old_daum"])
+    _title(wse, 2, "AXZ 결제내역 (비고/상품명에 '구다음' 포함)")
     if not old.empty:
-        wse.append([])  # 여백
         _append_df_at(wse, old, start_row=3)
+        next_row = 3 + len(old) + 3
     else:
         wse.cell(row=3, column=1, value="제외 항목 없음")
+        next_row = 5
+
+    old_rec = pd.DataFrame(res.get("old_daum_rec", []))
+    _title(wse, next_row, "현금영수증 (채널 = '다음메일')")
+    if not old_rec.empty:
+        _append_df_at(wse, old_rec, start_row=next_row + 1)
+    else:
+        wse.cell(row=next_row + 1, column=1, value="제외 항목 없음")
 
     _autofit(wb)
     out = io.BytesIO()

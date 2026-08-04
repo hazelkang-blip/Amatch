@@ -165,6 +165,15 @@ def run_reconciliation(*, bill, sap, rec, axz, pg_files=None, target_month_str):
         df_k_rec = df_k_rec[df_k_rec["전송상태"].fillna("").str.upper().str.contains("PG실패") == False]
     df_k_rec["계정ID_clean"] = df_k_rec["계정ID"].apply(clean_id)
 
+    # 구다음메일(현금영수증 채널='다음메일') 건 분리 → 정산 제외 대상
+    # 중복결제 시스템 취소분 중 현금영수증만 남은 건으로, 이후 대사/합계 계산에서 제외한다.
+    if "채널" in df_k_rec.columns:
+        is_daum_rec = df_k_rec["채널"].fillna("").astype(str).str.strip() == "다음메일"
+        df_daum_rec = df_k_rec[is_daum_rec].copy()
+        df_k_rec = df_k_rec[~is_daum_rec].copy()
+    else:
+        df_daum_rec = pd.DataFrame()
+
     if "채널" in df_k_rec.columns:
         df_k_rec = df_k_rec.sort_values("채널").drop_duplicates(subset=["계정ID_clean", "전송유형", "요청액"], keep="first")
     else:
@@ -265,6 +274,22 @@ def run_reconciliation(*, bill, sap, rec, axz, pg_files=None, target_month_str):
     else:
         old_daum_disp = pd.DataFrame(columns=["거래일시", "결제수단", "결제상태", "User ID", "결제ID", "상품명", "세금유형", "최종매출인식금액"])
 
+    # 현금영수증 채널='다음메일' 정산제외 건 (구다음결제건)
+    old_daum_rec_cols = ["일시", "계정 ID", "채널", "전송유형", "요청금액"]
+    if not df_daum_rec.empty:
+        daum_date_col = next((c for c in ["승인일시", "거래일시"] if c in df_daum_rec.columns), None)
+        pick = ([daum_date_col] if daum_date_col else []) + ["계정ID_clean", "채널", "전송유형", "요청액"]
+        old_daum_rec_disp = df_daum_rec[pick].copy()
+        ren = {"계정ID_clean": "계정 ID", "요청액": "요청금액"}
+        if daum_date_col:
+            ren[daum_date_col] = "일시"
+        old_daum_rec_disp = old_daum_rec_disp.rename(columns=ren)
+        if "일시" not in old_daum_rec_disp.columns:
+            old_daum_rec_disp["일시"] = "-"
+        old_daum_rec_disp = old_daum_rec_disp[old_daum_rec_cols]
+    else:
+        old_daum_rec_disp = pd.DataFrame(columns=old_daum_rec_cols)
+
     result = {
         "target_month": target_month_str,
         "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -285,6 +310,7 @@ def run_reconciliation(*, bill, sap, rec, axz, pg_files=None, target_month_str):
         "err_rec_reasons": reasons,
         "err_tax": _records(err_tax_disp),
         "old_daum": _records(old_daum_disp),
+        "old_daum_rec": _records(old_daum_rec_disp),
         "pivot_all": _pivot_payload(pivot_all),
         "pivot_success": _pivot_payload(get_status_pivot(df_axz_target, "결제완료")),
         "pivot_cancel": _pivot_payload(get_status_pivot(df_axz_target, "취소완료")),
