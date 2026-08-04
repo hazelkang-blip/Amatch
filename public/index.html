@@ -288,9 +288,14 @@ function renderTab() {
       ${recordsTable(d.err_tax, ["사업자번호", "최종매출인식금액", "SAP 원본", "차액"],
         { moneyCols: ["최종매출인식금액", "SAP 원본", "차액"], colorCols: ["차액"], emptyMsg: "세금계산서 내역이 일치합니다." })}`;
   } else {
-    b.innerHTML = `<div class="alert info">💡 <strong>'구다음메일 결제건'</strong> 내역입니다. 비고/상품명에 '구다음'이 포함되어 정산에서 자동 제외된 내역입니다.</div>
+    b.innerHTML = `<div class="alert info">💡 <strong>'구다음메일 결제건'</strong> 내역입니다. 정산에서 자동 제외된 내역입니다.</div>
+      <h3>AXZ 결제내역 <span class="muted" style="font-weight:400">(비고/상품명에 '구다음' 포함)</span></h3>
       ${d.old_daum && d.old_daum.length
         ? recordsTable(d.old_daum, ["거래일시", "결제수단", "결제상태", "User ID", "결제ID", "상품명", "세금유형", "최종매출인식금액"], { moneyCols: ["최종매출인식금액"] })
+        : '<p class="muted">제외 항목 없음</p>'}
+      <h3 style="margin-top:1.5rem">현금영수증 <span class="muted" style="font-weight:400">(채널 = '다음메일')</span></h3>
+      ${d.old_daum_rec && d.old_daum_rec.length
+        ? recordsTable(d.old_daum_rec, ["일시", "계정 ID", "채널", "전송유형", "요청금액"], { moneyCols: ["요청금액"] })
         : '<p class="muted">제외 항목 없음</p>'}`;
   }
 }
