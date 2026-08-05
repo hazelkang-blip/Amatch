@@ -272,7 +272,7 @@ def build_workbook(*, bill, sap, rec, axz, pg_files=None, target_month_str):
     err = pd.DataFrame(res["err_rec"])
     # 상세표 정렬: 소거·합산(시차보정) 먼저, 기타 확인 필요는 뒤로
     if not err.empty and "사유" in err.columns:
-        _order = {"익월 발행 예정건 (소거)": 0, "전월 말일 결제건 (합산)": 1}
+        _order = {"익월 발행 예정건 (소거)": 0, "전월 말일 결제건 (합산)": 1, "결제내역 상태 확인필요": 2}
         err = err.assign(_p=err["사유"].map(lambda s: _order.get(s, 9))).sort_values("_p").drop(columns="_p").reset_index(drop=True)
     DET_HDR = 13          # 상세표 헤더 행
     DET_START = DET_HDR + 1

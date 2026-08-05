@@ -208,6 +208,7 @@ const REC_BADGE = {
   "익월 발행 예정건 (소거)": { bg: "#e0f2fe", fg: "#0369a1" },
   "전월 말일 결제건 (합산)": { bg: "#fee2e2", fg: "#b91c1c" },
   "구다음결제건": { bg: "#f3e8ff", fg: "#7e22ce" },
+  "결제내역 상태 확인필요": { bg: "#fef3c7", fg: "#b45309" },
   "기타 확인 필요": { bg: "#f1f5f9", fg: "#475569" },
 };
 
@@ -304,13 +305,15 @@ function recRecTable(d) {
   if (!d.err_rec || !d.err_rec.length) return '<div class="alert success">🎉 상세 내역이 모두 일치합니다.</div>';
   const ADJ = ["익월 발행 예정건 (소거)", "전월 말일 결제건 (합산)"];
   const adj = d.err_rec.filter(r => ADJ.includes(r["사유"]));
-  const etc = d.err_rec.filter(r => !ADJ.includes(r["사유"]));
+  const status = d.err_rec.filter(r => r["사유"] === "결제내역 상태 확인필요");
+  const etc = d.err_rec.filter(r => !ADJ.includes(r["사유"]) && r["사유"] !== "결제내역 상태 확인필요");
   const cols = ["거래일시", "발행일시", "계정 ID", "AXZ", "카카오원본", "차액", "사유"];
   const opts = { moneyCols: ["AXZ", "카카오원본", "차액"], colorCols: ["차액"], badgeCol: "사유", badgeMap: REC_BADGE };
   const section = (title, rows, emptyMsg) =>
     `<h4 style="margin:1rem 0 0.5rem">${title} <span class="muted" style="font-weight:400">· ${rows.length}건</span></h4>`
     + (rows.length ? recordsTable(rows, cols, opts) : `<p class="muted">${emptyMsg}</p>`);
   return section("시차보정 대상 (소거 · 합산)", adj, "해당 없음")
+    + section("결제내역 상태 확인필요 (카카오 취소 · AXZ 미반영)", status, "해당 없음")
     + section("기타 확인 필요 (대사 불일치 · 별도 검토)", etc, "확인 필요 건 없음");
 }
 

@@ -174,15 +174,24 @@ def run_reconciliation(*, bill, sap, rec, axz, pg_files=None, target_month_str):
     else:
         df_daum_rec = pd.DataFrame()
 
+    # 중복 제거 키: 계정·전송유형·요청액에 '승인일시'(없으면 거래일시)까지 포함해
+    # 같은 시각 다채널 중복만 제거하고, 서로 다른 시각의 실제 별건 결제/취소는 보존한다.
+    # (중복결제 등으로 동일 금액 결제가 2건이면 예전엔 1건으로 합쳐져 대사가 틀어졌음)
+    _dedup_keys = ["계정ID_clean", "전송유형", "요청액"]
+    for _dc in ("승인일시", "거래일시"):
+        if _dc in df_k_rec.columns:
+            _dedup_keys.append(_dc)
+            break
     if "채널" in df_k_rec.columns:
-        df_k_rec = df_k_rec.sort_values("채널").drop_duplicates(subset=["계정ID_clean", "전송유형", "요청액"], keep="first")
+        df_k_rec = df_k_rec.sort_values("채널").drop_duplicates(subset=_dedup_keys, keep="first")
     else:
-        df_k_rec = df_k_rec.drop_duplicates(subset=["계정ID_clean", "전송유형", "요청액"], keep="first")
+        df_k_rec = df_k_rec.drop_duplicates(subset=_dedup_keys, keep="first")
 
     total_k_rec = df_k_rec[df_k_rec["전송유형"] == "결제"]["요청액"].sum() - df_k_rec[df_k_rec["전송유형"] == "취소"]["요청액"].abs().sum()
 
     df_k_rec["보정액"] = df_k_rec.apply(lambda r: -abs(r["요청액"]) if r["전송유형"] == "취소" else r["요청액"], axis=1)
-    agg_dict = {"보정액": "sum"}
+    df_k_rec["_취소건수"] = (df_k_rec["전송유형"] == "취소").astype(int)
+    agg_dict = {"보정액": "sum", "_취소건수": "sum"}
     if "채널" in df_k_rec.columns:
         agg_dict["채널"] = "first"
     # 카카오 일자는 '승인일시'(결제 승인일)를 우선 사용 — 합산(전월 말일) 판별·표시 기준
@@ -198,7 +207,7 @@ def run_reconciliation(*, bill, sap, rec, axz, pg_files=None, target_month_str):
     m_rec = pd.merge(a_rec, k_rec_sum, left_on="User ID", right_on="계정ID_clean", how="outer")
     # 금액·ID 컬럼만 0으로 채우고, 날짜(거래일시/카카오일시)는 NaT 유지 →
     # combine_first 가 AXZ 없는 건에서 카카오 승인일시로 정상 폴백하도록 함
-    _fill0 = [c for c in ["최종매출인식금액", "보정액", "User ID", "계정ID_clean", "채널"] if c in m_rec.columns]
+    _fill0 = [c for c in ["최종매출인식금액", "보정액", "_취소건수", "User ID", "계정ID_clean", "채널"] if c in m_rec.columns]
     m_rec[_fill0] = m_rec[_fill0].fillna(0)
     m_rec["ID_Display"] = m_rec["User ID"].replace(0, np.nan).combine_first(m_rec["계정ID_clean"].replace(0, np.nan))
 
@@ -232,6 +241,10 @@ def run_reconciliation(*, bill, sap, rec, axz, pg_files=None, target_month_str):
 
     def get_reason(row):
         axz, kakao = row["최종매출인식금액"], row["보정액"]
+        # 결제내역 상태 확인필요: 카카오는 결제취소를 반영(순액 차감)했으나 AXZ 결제내역엔 취소 미반영
+        # → AXZ 인식액이 카카오 실제 순액보다 큼. 결제내역 추출 후 취소된 건으로 AXZ 상태 갱신 필요.
+        if row.get("_취소건수", 0) > 0 and axz > kakao:
+            return "결제내역 상태 확인필요"
         # 익월 발행 예정건(소거): AXZ 거래일시(결제일)가 정산월 '말일' & 카카오 발행 없음
         # → 발행이 익월 1일로 넘어가 정산월 rec 에 없음
         if axz == 34900 and kakao == 0 and _is_day(row.get("거래일시"), _last_day):
