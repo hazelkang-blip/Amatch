@@ -267,12 +267,29 @@ def build_workbook(*, bill, sap, rec, axz, pg_files=None, target_month_str):
     # ---------- 요약_현금영수증 ----------
     wsr = wb.create_sheet("요약_현금영수증")
     _title(wsr, 1, "현금영수증 대사")
+
+    # 소거/합산 산출근거: 아래 상세표(사유=F, AXZ=C, 카카오원본=D)를 SUMIF 로 참조
+    err = pd.DataFrame(res["err_rec"])
+    DET_HDR = 13          # 상세표 헤더 행
+    DET_START = DET_HDR + 1
+    n_err = len(err)
+    DET_END = DET_START + n_err - 1 if n_err else DET_START
+    rng_reason = f"F{DET_START}:F{DET_END}"
+    rng_axz = f"C{DET_START}:C{DET_END}"
+    rng_kakao = f"D{DET_START}:D{DET_END}"
+    if n_err:
+        sogo_val = f'=-SUMIF({rng_reason},"익월 발행 예정건 (소거)",{rng_axz})'
+        hapsan_val = f'=SUMIF({rng_reason},"전월 말일 결제건 (합산)",{rng_kakao})'
+    else:  # 상세 없음 → 계산값 폴백
+        sogo_val = -summ["end_of_month_sum"]
+        hapsan_val = summ["prev_month_end_sum"]
+
     # AXZ 원본합계는 수식(현금영수증+자진발급, 최종매출인식금액 기준 · 구다음 포함 = 원본 로직과 동일)
     rows = [
         ("AXZ 현금영수증 원본합계(수식)",
          f'=SUMIFS({R_final},{R_tax},"현금영수증")+SUMIFS({R_final},{R_tax},"자진발급")', True),
-        ("(-) 익월 발행 예정건 (소거)", -summ["end_of_month_sum"], False),
-        ("(+) 전월 말일 결제건 (합산)", summ["prev_month_end_sum"], False),
+        ("(-) 익월 발행 예정건 (소거)", sogo_val, False),
+        ("(+) 전월 말일 결제건 (합산)", hapsan_val, False),
         ("보정된 AXZ 대상 총액", None, "calc_adj"),
         ("카카오 실제 발행액", summ["total_k_rec"], False),
         ("최종 발행 차액", None, "calc_diff"),
@@ -292,7 +309,24 @@ def build_workbook(*, bill, sap, rec, axz, pg_files=None, target_month_str):
         cell.number_format = WON_FMT
         rr += 1
     wsr.cell(row=rr + 1, column=1,
-             value="※ 익월/전월 시차보정·카카오 실제발행(중복제거·PG실패 제외)은 계산값입니다.").font = Font(size=9, color="64748B", italic=True)
+             value="※ 소거/합산은 아래 상세의 SUMIF 근거식입니다. 카카오 실제발행(중복제거·PG실패 제외)은 계산값입니다.").font = Font(size=9, color="64748B", italic=True)
+
+    # ---- 소거/합산 산출근거 상세표 ----
+    _title(wsr, DET_HDR - 1, "■ 소거 / 합산 산출근거 (현금영수증 대사 상세)")
+    det_cols = ["거래일시", "계정 ID", "AXZ", "카카오원본", "차액", "사유"]
+    for j, h in enumerate(det_cols):
+        wsr.cell(row=DET_HDR, column=1 + j, value=h).font = BOLD
+    if n_err:
+        for i, (_, r) in enumerate(err.iterrows()):
+            ri = DET_START + i
+            wsr.cell(row=ri, column=1, value=r.get("거래일시"))
+            wsr.cell(row=ri, column=2, value=r.get("계정 ID"))
+            for cj, key in ((3, "AXZ"), (4, "카카오원본"), (5, "차액")):
+                c = wsr.cell(row=ri, column=cj, value=r.get(key))
+                c.number_format = WON_FMT
+            wsr.cell(row=ri, column=6, value=r.get("사유"))
+    else:
+        wsr.cell(row=DET_START, column=1, value="상세 불일치 없음")
 
     # ---------- 정산제외 (구다음) ----------
     wse = wb.create_sheet("정산제외")
