@@ -28,13 +28,12 @@ axz = pd.DataFrame([
 ])
 bill = pd.DataFrame([{"캐시구분": "머니", "결제금액": 0}])
 sap = pd.DataFrame([{"거래처 1": "1112233444", "선수금": 0}])
-# 카카오 현금영수증: 정산월초 발행(합산 대상), 월중 발행(합산 아님)
+# 카카오 현금영수증: 승인일시=발행일시. 정산월 1일 발행(합산 대상), 월중 발행(합산 아님)
 rec = pd.DataFrame([
-    # 거래일시(발행일 정산월)와 승인일시(결제일 전월말일)가 둘 다 존재 → 승인일시 기준으로 합산
     {"계정ID": "u_prev", "전송유형": "결제", "요청금액": 34900, "전송상태": "성공",
-     "채널": "메일", "거래일시": "2025-07-02 10:00", "승인일시": "2025-06-30 09:00"},
+     "채널": "메일", "승인일시": "2025-07-01 00:10"},   # 발행일시 정산월 1일 → 전월 말일 결제 합산
     {"계정ID": "u_spur", "전송유형": "결제", "요청금액": 34900, "전송상태": "성공",
-     "채널": "메일", "거래일시": "2025-07-15 10:00", "승인일시": "2025-07-15 09:00"},   # 월중 결제 → 기타
+     "채널": "메일", "승인일시": "2025-07-15 09:00"},   # 월중 발행 → 기타
 ])
 
 kw = dict(
@@ -60,13 +59,18 @@ assert reason.get("u_prev") == "전월 말일 결제건 (합산)", reason
 assert reason.get("u_spur") == "기타 확인 필요", reason
 assert abs(s["prev_month_end_sum"] - 34900) < 1e-6, s["prev_month_end_sum"]
 
-# 합산건 거래일시 표시는 승인일시(결제일)여야 함 (1970 아님, 발행일 아님)
-disp = {row["계정 ID"]: row["거래일시"] for row in r["err_rec"]}
-assert disp.get("u_prev", "").startswith("2025-06-30"), disp
-assert "1970" not in disp.get("u_prev", ""), disp
+# 거래일시(AXZ 결제일)와 발행일시(카카오 승인일시)가 각각 올바르게 표시되는지
+by_id = {row["계정 ID"]: row for row in r["err_rec"]}
+# 소거 u_end: 거래일시=정산월 말일, 발행일시 없음('-')
+assert by_id["u_end"]["거래일시"].startswith("2025-07-31"), by_id["u_end"]
+assert by_id["u_end"]["발행일시"] == "-", by_id["u_end"]
+# 합산 u_prev: 거래일시 없음('-'), 발행일시=정산월 1일 (1970 아님)
+assert by_id["u_prev"]["거래일시"] == "-", by_id["u_prev"]
+assert by_id["u_prev"]["발행일시"].startswith("2025-07-01"), by_id["u_prev"]
 
 # 엑셀(SUMIF 근거식 포함) 생성 정상
 assert len(build_workbook(**kw)) > 0
 
-print("표시 거래일시(u_prev):", disp.get("u_prev"))
-print("\n=== 말일 조건(소거/합산) + 승인일시 표시 검증 통과 ===")
+print("u_end  거래일시/발행일시:", by_id["u_end"]["거래일시"], "/", by_id["u_end"]["발행일시"])
+print("u_prev 거래일시/발행일시:", by_id["u_prev"]["거래일시"], "/", by_id["u_prev"]["발행일시"])
+print("\n=== 소거/합산 날짜기준 + 거래/발행일시 분리표시 검증 통과 ===")
