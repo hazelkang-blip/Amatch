@@ -205,16 +205,22 @@ def run_reconciliation(*, bill, sap, rec, axz, pg_files=None, target_month_str):
     for col in ["거래일시", "카카오일시"]:
         if col in m_rec.columns:
             m_rec[col] = pd.to_datetime(m_rec[col], errors="coerce")
-    m_rec["거래일시_표시"] = m_rec["거래일시"].combine_first(m_rec.get("카카오일시", pd.NaT))
-    m_rec["거래일시_표시"] = m_rec["거래일시_표시"].dt.strftime("%Y-%m-%d %H:%M").fillna("-")
+    # 거래일시(AXZ 결제일)와 발행일시(카카오 승인일시)를 각각 표시 — 소거/합산 판별을 눈으로 구분
+    m_rec["거래일시_str"] = m_rec["거래일시"].dt.strftime("%Y-%m-%d %H:%M").fillna("-")
+    if "카카오일시" in m_rec.columns:
+        m_rec["발행일시_str"] = m_rec["카카오일시"].dt.strftime("%Y-%m-%d %H:%M").fillna("-")
+    else:
+        m_rec["발행일시_str"] = "-"
 
     m_rec["차액"] = m_rec["최종매출인식금액"] - m_rec["보정액"]
     err_rec = m_rec[m_rec["차액"] != 0].copy()
 
-    # 말일 시차보정 판별용 날짜 기준 (정산월 말일 / 전월 말일)
+    # 시차보정 판별용 날짜 기준
+    # 카카오 현금영수증의 승인일시 = '발행일시'. 전월 말일 결제분은 정산월 1일에 발행되고,
+    # 정산월 말일 결제분은 익월 1일에 발행되어 정산월 rec 에서 빠진다.
     _tp = pd.Period(target_month_str, freq="M")
-    _last_day = _tp.end_time.normalize()            # 정산월 말일 (예: 2025-07-31)
-    _prev_last_day = (_tp - 1).end_time.normalize()  # 전월 말일   (예: 2025-06-30)
+    _last_day = _tp.end_time.normalize()       # 정산월 말일 (예: 2025-07-31)
+    _first_day = _tp.start_time.normalize()    # 정산월 1일  (예: 2025-07-01)
 
     def _is_day(ts, ref):
         if ts is None or pd.isna(ts):
@@ -226,13 +232,13 @@ def run_reconciliation(*, bill, sap, rec, axz, pg_files=None, target_month_str):
 
     def get_reason(row):
         axz, kakao = row["최종매출인식금액"], row["보정액"]
-        # 익월 발행 예정건(소거): 정산월 '말일' 결제 → 카카오 발행이 익월로 넘어간 시차분
-        # (AXZ 거래일시 = 결제일 기준)
+        # 익월 발행 예정건(소거): AXZ 거래일시(결제일)가 정산월 '말일' & 카카오 발행 없음
+        # → 발행이 익월 1일로 넘어가 정산월 rec 에 없음
         if axz == 34900 and kakao == 0 and _is_day(row.get("거래일시"), _last_day):
             return "익월 발행 예정건 (소거)"
-        # 전월 말일 결제건(합산): 카카오 승인일시(=결제 승인일)가 '전월 말일' →
-        # 카카오 발행은 정산월에 이뤄져 정산월 rec 에 들어온 시차분 (대칭 조건)
-        if axz == 0 and kakao == 34900 and _is_day(row.get("카카오일시"), _prev_last_day):
+        # 전월 말일 결제건(합산): 카카오 발행일시(승인일시)가 정산월 '1일' & AXZ 결제내역 없음
+        # → 전월 말일 결제분이 정산월 1일에 발행되어 정산월 rec 에만 존재
+        if axz == 0 and kakao == 34900 and _is_day(row.get("카카오일시"), _first_day):
             return "전월 말일 결제건 (합산)"
         if axz == 0 and kakao < 0 and str(row.get("채널", "")).strip() == "다음메일":
             return "구다음결제건"
@@ -279,11 +285,11 @@ def run_reconciliation(*, bill, sap, rec, axz, pg_files=None, target_month_str):
         mismatch_pg_disp = pd.DataFrame(columns=["결제번호", "결제수단", "AXZ", "카카오원본", "차액"])
 
     if not err_rec.empty:
-        err_rec_disp = err_rec[["거래일시_표시", "ID_Display", "최종매출인식금액", "보정액", "차액", "사유"]].rename(
-            columns={"거래일시_표시": "거래일시", "ID_Display": "계정 ID", "최종매출인식금액": "AXZ", "보정액": "카카오원본"})
+        err_rec_disp = err_rec[["거래일시_str", "발행일시_str", "ID_Display", "최종매출인식금액", "보정액", "차액", "사유"]].rename(
+            columns={"거래일시_str": "거래일시", "발행일시_str": "발행일시", "ID_Display": "계정 ID", "최종매출인식금액": "AXZ", "보정액": "카카오원본"})
         reasons = list(pd.unique(err_rec["사유"]))
     else:
-        err_rec_disp = pd.DataFrame(columns=["거래일시", "계정 ID", "AXZ", "카카오원본", "차액", "사유"])
+        err_rec_disp = pd.DataFrame(columns=["거래일시", "발행일시", "계정 ID", "AXZ", "카카오원본", "차액", "사유"])
         reasons = []
 
     if not err_tax.empty:

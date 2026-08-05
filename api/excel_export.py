@@ -278,9 +278,10 @@ def build_workbook(*, bill, sap, rec, axz, pg_files=None, target_month_str):
     DET_START = DET_HDR + 1
     n_err = len(err)
     DET_END = DET_START + n_err - 1 if n_err else DET_START
-    rng_reason = f"F{DET_START}:F{DET_END}"
-    rng_axz = f"C{DET_START}:C{DET_END}"
-    rng_kakao = f"D{DET_START}:D{DET_END}"
+    # 상세표 열: A=거래일시 B=발행일시 C=계정ID D=AXZ E=카카오원본 F=차액 G=사유
+    rng_reason = f"G{DET_START}:G{DET_END}"
+    rng_axz = f"D{DET_START}:D{DET_END}"
+    rng_kakao = f"E{DET_START}:E{DET_END}"
     if n_err:
         sogo_val = f'=-SUMIF({rng_reason},"익월 발행 예정건 (소거)",{rng_axz})'
         hapsan_val = f'=SUMIF({rng_reason},"전월 말일 결제건 (합산)",{rng_kakao})'
@@ -317,18 +318,19 @@ def build_workbook(*, bill, sap, rec, axz, pg_files=None, target_month_str):
 
     # ---- 소거/합산 산출근거 상세표 ----
     _title(wsr, DET_HDR - 1, "■ 소거 / 합산 산출근거 (현금영수증 대사 상세)")
-    det_cols = ["거래일시", "계정 ID", "AXZ", "카카오원본", "차액", "사유"]
+    det_cols = ["거래일시", "발행일시", "계정 ID", "AXZ", "카카오원본", "차액", "사유"]
     for j, h in enumerate(det_cols):
         wsr.cell(row=DET_HDR, column=1 + j, value=h).font = BOLD
     if n_err:
         for i, (_, r) in enumerate(err.iterrows()):
             ri = DET_START + i
             wsr.cell(row=ri, column=1, value=r.get("거래일시"))
-            wsr.cell(row=ri, column=2, value=r.get("계정 ID"))
-            for cj, key in ((3, "AXZ"), (4, "카카오원본"), (5, "차액")):
+            wsr.cell(row=ri, column=2, value=r.get("발행일시"))
+            wsr.cell(row=ri, column=3, value=r.get("계정 ID"))
+            for cj, key in ((4, "AXZ"), (5, "카카오원본"), (6, "차액")):
                 c = wsr.cell(row=ri, column=cj, value=r.get(key))
                 c.number_format = WON_FMT
-            wsr.cell(row=ri, column=6, value=r.get("사유"))
+            wsr.cell(row=ri, column=7, value=r.get("사유"))
     else:
         wsr.cell(row=DET_START, column=1, value="상세 불일치 없음")
 

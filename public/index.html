@@ -305,7 +305,7 @@ function recRecTable(d) {
   const ADJ = ["익월 발행 예정건 (소거)", "전월 말일 결제건 (합산)"];
   const adj = d.err_rec.filter(r => ADJ.includes(r["사유"]));
   const etc = d.err_rec.filter(r => !ADJ.includes(r["사유"]));
-  const cols = ["거래일시", "계정 ID", "AXZ", "카카오원본", "차액", "사유"];
+  const cols = ["거래일시", "발행일시", "계정 ID", "AXZ", "카카오원본", "차액", "사유"];
   const opts = { moneyCols: ["AXZ", "카카오원본", "차액"], colorCols: ["차액"], badgeCol: "사유", badgeMap: REC_BADGE };
   const section = (title, rows, emptyMsg) =>
     `<h4 style="margin:1rem 0 0.5rem">${title} <span class="muted" style="font-weight:400">· ${rows.length}건</span></h4>`
