@@ -185,16 +185,21 @@ def run_reconciliation(*, bill, sap, rec, axz, pg_files=None, target_month_str):
     agg_dict = {"보정액": "sum"}
     if "채널" in df_k_rec.columns:
         agg_dict["채널"] = "first"
-    if "거래일시" in df_k_rec.columns:
-        agg_dict["거래일시"] = "max"
-    elif "승인일시" in df_k_rec.columns:
+    # 카카오 일자는 '승인일시'(결제 승인일)를 우선 사용 — 합산(전월 말일) 판별·표시 기준
+    if "승인일시" in df_k_rec.columns:
         agg_dict["승인일시"] = "max"
+    elif "거래일시" in df_k_rec.columns:
+        agg_dict["거래일시"] = "max"
 
     k_rec_sum = df_k_rec.groupby("계정ID_clean").agg(agg_dict).reset_index()
-    k_rec_sum = k_rec_sum.rename(columns={"거래일시": "카카오일시", "승인일시": "카카오일시"}, errors="ignore")
+    k_rec_sum = k_rec_sum.rename(columns={"승인일시": "카카오일시", "거래일시": "카카오일시"}, errors="ignore")
 
     a_rec = raw_axz_rec_df.groupby("User ID").agg({"최종매출인식금액": "sum", "거래일시": "max"}).reset_index()
-    m_rec = pd.merge(a_rec, k_rec_sum, left_on="User ID", right_on="계정ID_clean", how="outer").fillna(0)
+    m_rec = pd.merge(a_rec, k_rec_sum, left_on="User ID", right_on="계정ID_clean", how="outer")
+    # 금액·ID 컬럼만 0으로 채우고, 날짜(거래일시/카카오일시)는 NaT 유지 →
+    # combine_first 가 AXZ 없는 건에서 카카오 승인일시로 정상 폴백하도록 함
+    _fill0 = [c for c in ["최종매출인식금액", "보정액", "User ID", "계정ID_clean", "채널"] if c in m_rec.columns]
+    m_rec[_fill0] = m_rec[_fill0].fillna(0)
     m_rec["ID_Display"] = m_rec["User ID"].replace(0, np.nan).combine_first(m_rec["계정ID_clean"].replace(0, np.nan))
 
     for col in ["거래일시", "카카오일시"]:
