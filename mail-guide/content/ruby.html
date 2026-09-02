@@ -1,0 +1,18 @@
+<h1>메일발송서버 이용가이드 - ruby language</h1>
+<p class="lede">ruby 에서 메일발송 서버 이용 예제</p>
+
+<h2>개요</h2>
+<p>ruby 에서 메일발송 서버 이용 예제</p>
+
+<h2>simple 메일 발송 예제</h2>
+<div class="codeblock">
+  <div class="codeblock-head"><span class="codeblock-lang">ruby — Net::SMTP</span></div>
+<pre><code>#!/usr/local/bin/ruby -w
+require 'net/smtp'
+
+Net::SMTP.start('mail-kmh-relay.daumkakao.io', 25) do |smtp|
+    smtp.send_message "Subject: mail test\n\ncontent",
+                      'wwl1400test@daum.net',
+                      ['wwl1401test@daum.net', 'wwl1402test@daum.net']
+end</code></pre>
+</div>

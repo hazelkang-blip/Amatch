@@ -1,0 +1,259 @@
+<h1>c hm libs 로 smtp 구현</h1>
+<p class="lede">사내 <code>hm_mail</code> 라이브러리를 이용해 SMTP 클라이언트를 직접 구현한 예제입니다.</p>
+
+<h2>개요</h2>
+<p>
+  <code>hm_mail_send.c</code> 참고 –
+  <a href="https://github.daumkakao.com/MailProject/hanmail_server_utf8/blob/master/libs/hm_mail/hm_mail_send.c">github.daumkakao.com/MailProject/hanmail_server_utf8 … hm_mail_send.c</a>
+</p>
+
+<div class="codeblock">
+  <div class="codeblock-head"><span class="codeblock-lang">c — hm_mail_send.c</span></div>
+<pre><code>/**
+ * read response
+ * @param rp resource pool
+ * @param rb read buffer
+ * @param response response message
+ * @return 0 - response code starts with 2
+ */
+static int read_response(respool_t *rp, readbuf_t *rb, char **response) {
+    int chunk_size = 1024;
+    int timeout_ms = 1000;
+    char *last = NULL;
+    strbuf_t *stb = rp_create_strbuf(rp, chunk_size);
+    if (stb == NULL) {
+        return -1;
+    }
+    char *readline;
+    while ((readline = rb_gets(rb, &amp;last, timeout_ms)) != NULL) {
+#ifdef DEBUG_SIMPLE_SMTP_CLIENT
+        fprintf(stderr, "S: %s", readline);
+#endif
+        stb_addstr(stb, readline);
+        // check last line of response
+        if (readline[3] == ' ') {
+            break;
+        }
+    }
+    *response = rp_strdup(rp, stb_getbuf(stb));
+    // error
+    if (response == NULL || (strncasecmp(*response, "2", 1) != 0)) {
+        return -1;
+    }
+    return 0;
+}
+
+/**
+ * do smtp command
+ * @param rp
+ * @param sb
+ * @param rb
+ * @param command
+ * @param response
+ * @return
+ */
+static int do_smtp_command(respool_t *rp, sendbuf_t *sb, readbuf_t *rb, char *command, char **response) {
+//    fprintf(stderr, "%s", command); // DEBUG
+    sb_write_strs(sb, command, "\n", NULL);
+    sb_flush(sb);
+#ifdef DEBUG_SIMPLE_SMTP_CLIENT
+    fprintf(stderr, "C: %s\n", command);
+#endif
+    return read_response(rp, rb, response);
+}
+
+/**
+ * do smtp data
+ * @param rp
+ * @param sb
+ * @param rb
+ * @param command
+ * @param response
+ * @return
+ */
+static int do_smtp_data(respool_t *rp, sendbuf_t *sb, readbuf_t *rb, char *command, char **response) {
+    sb_write_strs(sb, command, "\n", NULL);
+    sb_flush(sb);
+#ifdef DEBUG_SIMPLE_SMTP_CLIENT
+    fprintf(stderr, "C: (data...)\n");
+#endif
+    return read_response(rp, rb, response);
+}
+
+int sendmail_hmail(respool_t *rp, const char *from, char **recv, const char *filepath) {
+    int port = 2525;
+    char* host = "hmail-express.daumkakao.io";
+//    char* host = "localhost";
+    int timeout_ms = 1000;
+    int maxchunk = 1024;
+    int bufsize = 1024;
+    char *response = NULL;
+    int rc = 0;
+
+    // read email file
+    int chunk_size = 1024;
+    strbuf_t *stb = rp_create_strbuf(rp, chunk_size);
+    rc = file2strbuf(stb, filepath);
+    if (rc) {
+        return SMTP_ERROR_FILE;
+    }
+    char *message = rp_strdup(rp, stb_getbuf(stb));
+//    fprintf(stderr, "%s\n", message); // debug
+
+    // connect to smtp host
+    int sd = connect_tcp(host, port, timeout_ms);
+    if (sd &lt; 0) return SMTP_ERROR_CONNECTION;
+
+    readbuf_t *rb = NULL;
+    sendbuf_t *sb = NULL;
+
+    // create buffer for smtp
+    sb = rp_create_sendbuf(rp, sd, 4096, timeout_ms);
+    if (sb == NULL) {
+        return -3;
+    }
+    rb = rp_create_readbuf(rp, sd, bufsize, maxchunk);
+    if (rb == NULL) {
+        return -4;
+    }
+
+    // read greeting
+    rc = read_response(rp, rb, &amp;response);
+    if (rc) {
+        return SMTP_ERROR_GREETING;
+    }
+
+    // EHLO
+    rc = do_smtp_command(rp, sb, rb, "EHLO daum.net", &amp;response);
+    if (rc) {
+        return SMTP_ERROR_EHLO;
+    }
+
+    // MAIL FROM
+    char* from_command = hm_util_rp_make_string(rp, "MAIL FROM: %s", from);
+//    fprintf(stderr, "%s\n", from_command); // debug
+    rc = do_smtp_command(rp, sb, rb, from_command, &amp;response);
+    if (rc) {
+        return SMTP_ERROR_FROM;
+    }
+
+    // RCPT TO
+    int count_rcpt = 0;
+    int i = 0;
+    while (recv[i] != NULL) {
+        if (recv[i][0] == '\0') {
+            i++;
+            continue;
+        }
+        char* recipient = recv[i++];
+        do_smtp_command(rp, sb, rb, hm_util_rp_make_string(rp, "RCPT TO: %s", recipient), &amp;response);
+        // rcpt to fail
+        if (response == NULL) {
+            return SMTP_ERROR_RCPT;
+        }
+        // count when success
+        if (strncasecmp(response, "2", 1) == 0) {
+            count_rcpt++;
+        }
+        // skip for other responses
+    }
+
+    // check is there any passed rcpt
+    if (count_rcpt == 0) {
+        return SMTP_ERROR_RCPT_ZERO; // rcpt count is 0
+    }
+
+    // DATA
+    do_smtp_command(rp, sb, rb, "DATA", &amp;response);
+    if (response == NULL || (strncasecmp(response, "3", 1) != 0)) {
+        return SMTP_ERROR_DATA;
+    }
+    rc = do_smtp_data(rp, sb, rb, hm_util_rp_make_string(rp, "%s\n.", message), &amp;response);
+    if (rc) {
+        return SMTP_ERROR_DATA_END;
+    }
+
+    // QUIT
+    rc = do_smtp_command(rp, sb, rb, "QUIT", &amp;response);
+    if (rc) {
+        return SMTP_ERROR_QUIT;
+    }
+
+    return 0;
+}</code></pre>
+</div>
+
+<p>
+  <code>test_hm_mail_send.c</code> 참고 –
+  <a href="https://github.daumkakao.com/MailProject/hanmail_server_utf8/blob/master/libs/hm_mail/test/sample_hm_mail_send/test_hm_mail_send.c">github.daumkakao.com/MailProject/hanmail_server_utf8 … test_hm_mail_send.c</a>
+</p>
+
+<div class="codeblock">
+  <div class="codeblock-head"><span class="codeblock-lang">c — test_hm_mail_send.c</span></div>
+<pre><code>int main() {
+    respool_t *rp = create_respool();
+    const char* wrong_filepath = "test_wrong_file.eml";
+    const char* filepath = "test.eml";
+    const char* from = "wwl1400test@daum.net";
+//    const char* from = NULL;
+    char *recv[] = {
+            "wwl1401test_wrong@daum.net",
+            "wwl1402test@daum.net",
+            NULL
+    };
+    int ret = 0;
+
+//    int status_code = sendmail_using_hmail(from, recv, filepath);
+//    printf("return code=%d\n", status_code);
+
+    // normal test
+    printf("== normal send test; from=%s ==\n", from);
+    int status_code = sendmail_hmail(rp, from, recv, filepath);
+    if (status_code != 0) {
+        fprintf(stderr, "failed normal test; status_code=%d\n", status_code);
+        return -1;
+    }
+    printf("success normal test; status_code=%d\n", status_code);
+
+    // wrong filepath test
+    printf("== wrong filepath test; from=%s ==\n", from);
+    if ((ret = sendmail_hmail(rp, from, recv, wrong_filepath)) != SMTP_ERROR_FILE) {
+        fprintf(stderr, "wrong filepath test failed; ret=%d\n", ret);
+        return -2;
+    }
+    printf("success wrong filepath test\n");
+
+    // wrong from test
+    printf("== wrong from test; from=%s ==\n", from);
+    if (sendmail_hmail(rp, NULL, recv, filepath) != SMTP_ERROR_FROM) {
+        fprintf(stderr, "failed wrong from test\n");
+        return -3;
+    }
+    printf("success wrong from test\n");
+
+    // wrong rcpt test - hmail doesn't reject
+//    char *wrong_recv[] = {
+//            "wwl1401test_wrong@daum.net",
+//            "wwl1402test_wrong@daum.net",
+//            NULL
+//    };
+//    printf("== wrong rcpt test; from=%s ==\n", from);
+//    if ((ret = sendmail_hmail(rp, from, wrong_recv, filepath)) != SMTP_ERROR_RCPT_ZERO) {
+//        fprintf(stderr, "failed wrong rcpt test; ret=%d\n", ret);
+//        return -4;
+//    }
+//    printf("success wrong rcpt test\n");
+
+    // destroy
+    destroy_respool(rp);
+}</code></pre>
+</div>
+
+<h2>참고</h2>
+<p><strong>SMTP Protocol</strong></p>
+<div class="callout info">
+  <span class="callout-icon">ℹ️</span>
+  <div class="callout-body">
+    smtp response 마지막 라인 구분시 reply code 뒤의 문자가 <strong>space</strong> 인지로 구분해야 된다.
+  </div>
+</div>

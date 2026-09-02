@@ -1,0 +1,71 @@
+<h1>메일발송서버 이용가이드 - shell</h1>
+<p class="lede">telnet 으로 SMTP 세션을 직접 주고받으며 발송을 확인하는 방법입니다.</p>
+
+<h2>mail-kmh-relay.daumkakao.io 로 보내는 예</h2>
+<div class="codeblock">
+  <div class="codeblock-head"><span class="codeblock-lang">shell — telnet SMTP 세션</span></div>
+<pre><code>hanadmin@ mta:/hanmail [11:48:32]$ telnet mail-kmh-relay.daumkakao.io 25
+Trying 10.60.255.25...
+Connected to mail-kmh-relay.daumkakao.io.
+Escape character is '^]'.
+220 mail-kmh-relay3.pg1.krane.9rum.cc ESMTP welcome to HanMail.Net(tm) ready
+EHLO mail.daum.net
+250-mail-kmh-relay3.pg1.krane.9rum.cc Hello [10.15.75.41], pleased to meet you
+250-SIZE 71680000
+250 ENHANCEDSTATUSCODES
+MAIL FROM: junho85@daum.net
+250 2.1.0 junho85@daum.net... Sender ok
+RCPT TO: junho85@daum.net
+250 2.1.5 junho85@daum.net... Recipient ok
+DATA
+354 Enter mail, end with "." on a line by itself
+subject: this is test subject
+from: junho85@daum.net
+
+this is test contents.
+.
+250 2.0.0 l4QBmrJID1823084023 Message accepted for delivery
+quit
+221 2.0.0 mail-kmh-relay3.pg1.krane.9rum.cc closing connection
+Connection closed by foreign host.</code></pre>
+</div>
+
+<h2>lc.mail.daum.net 으로 보내는 예 <span class="badge dep">deprecated</span></h2>
+<div class="codeblock">
+  <div class="codeblock-head"><span class="codeblock-lang">shell — telnet SMTP 세션 (deprecated)</span></div>
+<pre><code>$ telnet lc.mail.daum.net 25
+Trying 10.27.17.137...
+Connected to lmail-vm1.mail.daum.net.
+Escape character is '^]'.
+220 mail-lmail-vm1.hanmail.net ESMTP welcome to HanMail.Net(tm) ready at Mon, 3 Mar 2014 15:14:39 +0900
+EHLO test
+250-mail-lmail-vm1.hanmail.net Hello [10.15.4.66], pleased to meet you
+250-ENHANCEDSTATUSCODES
+250-PIPELINING
+250-8BITMIME
+250-SIZE 35000000
+250-DSN
+250-ETRN
+250-DELIVERBY
+250 HELP
+MAIL FROM: test@test.com
+250 2.1.0 test@test.com... Sender ok
+RCPT TO: wwl1401test@daum.net
+250 2.1.5 wwl1401test@daum.net... Recipient ok
+DATA
+354 Enter mail, end with "." on a line by itself
+from: test@test.com
+subject: test mail
+
+test mail
+.
+250 2.0.0 s236Ed4k003394 Message accepted for delivery</code></pre>
+</div>
+
+<div class="callout warn">
+  <span class="callout-icon">⚠️</span>
+  <div class="callout-body">
+    <code>lc.mail.daum.net</code> 은 deprecated 입니다.
+    <code>mail-kmh-relay.daumkakao.io</code> 로 대체 하시기 바랍니다.
+  </div>
+</div>

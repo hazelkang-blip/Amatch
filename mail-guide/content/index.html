@@ -1,0 +1,316 @@
+<h1>메일발송서버 이용가이드</h1>
+<p class="lede">메일파트에서 제공하는 공용 메일 발송 서버 이용 가이드입니다.</p>
+
+<h2>개요</h2>
+
+<div class="callout warn">
+  <span class="callout-icon">⚠️</span>
+  <div class="callout-body">
+    <span class="callout-title">(무기한 홀딩) 발송자 주소 사전등록제</span>
+    2021년 6월 15일부터 발송자 주소 정책이 사전등록제로 변경됩니다. 자세한 내용은
+    <a href="#sender-address">발신전용메일의 보낸이주소</a> 항목을 참고해주세요.
+  </div>
+</div>
+
+<ul>
+  <li>여기 설명된 발송서버는 <strong>가입환영, 결제완료 등 실시간 알림 목적인 B2C 메일</strong>에 한해서만 사용할 수 있습니다.</li>
+  <li>그리고 <strong>대량발송인 경우에는 EMS</strong>를 이용해주시길 바랍니다.</li>
+  <li>사용자간의 메일 발송 기능이 필요하신 경우 아지트에 별도 문의주시기 바랍니다. (→ 멘션 <code>@@mailft</code>)</li>
+</ul>
+
+<h2>주의사항</h2>
+
+<h3>발송시 주의사항</h3>
+
+<h4 id="ad-mail-consent">광고메일 발송은 수신에 동의한 사용자에게만 발송</h4>
+<div class="callout danger">
+  <span class="callout-icon">🚫</span>
+  <div class="callout-body">
+    영리목적의 광고성 메일 발송 시, 가이드라인을 준수해야 하며 해당 가이드라인을 준수하지 않을 경우
+    <strong>3천만원 이하의 과태료</strong>가 부과될 수 있습니다.
+  </div>
+</div>
+
+<h4>대량메일발송 (분당 500통 이상) 은 사전 협의 필요</h4>
+<ul>
+  <li>갑작스런 발송량 증가는 전체 발송에 영향을 줄 수 있으므로 사전 협의가 필요합니다.</li>
+  <li>※ 분당 500통에서의 <strong>“통”은 받는 주소 1개당 1통</strong>을 의미합니다.
+    <ul>
+      <li>ex) 한 번의 SMTP 발송, 받는 주소가 100개(RCPT TO 100개) = <strong>100통</strong></li>
+      <li>ex) 세 번의 SMTP 발송, 각각 받는 주소 1개(RCPT TO 1개) = <strong>3통</strong></li>
+    </ul>
+  </li>
+</ul>
+
+<h4>공지메일 등 일괄대량발송은 ems 시스템 이용</h4>
+<ul>
+  <li>공지메일 처럼 일시적으로 수만명~수천만명에게 메일을 발송하는 경우 EMS 를 이용하시기 바랍니다.
+    <br><a href="https://ems.daumtools.com/">https://ems.daumtools.com/</a></li>
+  <li>공용 메일발송 서버는 일시적인 대량메일 발송 보다 <strong>이벤트성</strong> (ex. 댓글 알람 메일, 인증확인메일 등) 메일에 적합합니다.</li>
+</ul>
+
+<h4>첨부파일의 용량이 큰 메일의 대량 발송은 권장하지 않음</h4>
+<ul>
+  <li>메일의 용량이 커지면 메일발송 속도가 느려집니다.</li>
+  <li>수신측에서도 수신속도가 느려지고, 수신측에서 메일 용량 제한을 하게 되는 경우 수신이 안되는 경우도 발생합니다.</li>
+  <li>다운로드 링크를 보내주고 그 링크 클릭시 다운로드 되도록 하는 것을 권장합니다.</li>
+</ul>
+
+<h3 id="sender-address">발신전용메일의 보낸이주소<span class="badge dep">연기중</span></h3>
+
+<div class="callout warn">
+  <span class="callout-icon">📌</span>
+  <div class="callout-body">
+    ※ 아래 내용은 2021년 <strong>6월 15일</strong>부터 적용되는 내용입니다. → <strong>적용일은 연기되었으나</strong> 발송주소는 아래 가이드에 맞게 사용 및 등록신청해주세요.
+  </div>
+</div>
+
+<ul>
+  <li>사내 네트워크에 속한 서버에서만 사용이 가능합니다. (타 IDC 나, AWS 등에서는 접근 할 수 없습니다.)</li>
+  <li>분당 최대 500통 이상 발송해서는 안되며, 사용시 메일파트에 공유해야 합니다.</li>
+  <li>대량 메일 발송은 <a href="http://ems.daumtools.com/">http://ems.daumtools.com/</a> 을 이용 하기 바랍니다.</li>
+  <li>광고 메일을 발송 하게 될 경우 공동체일 경우 ACL 요청을 따로 하셔야 합니다
+    (참고 <a href="https://kakao.agit.in/g/300000811/wall/331446199">아지트</a>)</li>
+  <li>KMH 발송목록에 등록되지 않은 주소로는 메일을 발송할 수 없습니다.
+    (<a href="https://kakao.agit.in/g/300000811/wall">아지트</a>에서 등록 신청가능)
+    <br>※ 적용홀딩중 (사전등록중)</li>
+</ul>
+
+<h4>영리목적 광고성 메일 발송 시, 주의사항</h4>
+<ul>
+  <li>영리목적의 광고성 정보는 전송자가 경제적 이득을 취할 목적으로 전송하는
+    ① 전송자에 관한 정보 ② 전송자가 제공할 재화나 서비스의 내용을 말합니다.</li>
+  <li>수신동의를 받지 않고 광고성 정보를 전송하는 경우에는 <strong>3천만원 이하의 과태료</strong>가 부과될 수 있습니다.</li>
+</ul>
+
+<p><strong>#. 영리목적 광고성 메일 발송 가이드라인</strong></p>
+<ul>
+  <li>메일 운영 정책 링크 참고: <a href="https://mail.daum.net/policy">https://mail.daum.net/policy</a></li>
+  <li>메일 운영 정책 &gt; 스팸 규제법률 &gt; 광고 발송 법률: 영리목적의 광고성 정보전송의 제한</li>
+  <li>메일 운영 정책 &gt; 스팸 규제법률 &gt; 기타 규제 법률: 정보통신망 이용촉진 및 정보보호 등에 관한 법률 및 시행령에 규정된 광고 전송 사업자의 의무사항</li>
+  <li>광고성 메일을 발송하기 전에는 <strong>수신자의 동의여부를 한 번 더 체크</strong>해주시고,
+    필요 시 <strong>사전에 법무검토 등을 통해 정보성/광고성 정보인지 여부를 확인 후 발송</strong>해주시길 바랍니다.</li>
+</ul>
+
+<h4>발송자명 사전등록제 (2021.06.15~)</h4>
+<p>
+  2021년 6월 15일부터 카카오 서비스 또는 운영자를 사칭하는 메일로 인한 유저 피해를 방지하기 위하여
+  <strong>카카오 서비스에서 유저에게 발송하는 이메일의 도메인을 <code>kakaocorp.com</code> 으로 변경</strong>하고,
+  메일발송시스템(KMH)을 통해 발송하는 이메일의 발송자명을 자율 사용에서 <strong>사전등록제</strong>로 변경합니다.
+</p>
+<ul>
+  <li>발송주소는 [문의] <em>다음메일 문의/제안/버그리포팅</em> 의 글양식 “<strong>KMH 발송자 등록/수정</strong>”을 통해서 등록요청이 가능합니다.</li>
+  <li><strong>Daum 서비스</strong>의 경우, 기존 발신전용 주소(<code>notice-master@daum.net</code>)를 그대로 사용하시면 됩니다.</li>
+  <li><strong>카카오 서비스</strong>는 <code>noreply_서비스명@kakaocorp.com</code> 을 등록해서 사용하시는 것을 권장합니다.</li>
+  <li>만약 공용 발송계정이 필요하다면 <code>noreply@kakaocorp.com</code> 을 별도 등록없이 사용하실 수 있으니 참고 부탁드립니다.</li>
+</ul>
+<div class="callout info">
+  <span class="callout-icon">ℹ️</span>
+  <div class="callout-body">
+    ※ 기존에 권장하는 형식의 이메일 주소(<code>noreply_서비스명@kakaocorp.com</code>)로 발송하고 계셨다면 기존주소가 발송자목록에 자동등록되오니 재신청하지 않으셔도 됩니다.<br>
+    ※ 등록된 이메일 주소를 조회할 수 있는 기능은 이후 업데이트 하겠습니다.
+  </div>
+</div>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th class="col-narrow">구분</th><th>보낸이 주소</th></tr></thead>
+  <tbody>
+    <tr><td>Daum 서비스</td><td>기존 발신전용 주소를 사용 (ex. <code>notice-master@daum.net</code>)</td></tr>
+    <tr><td>카카오 서비스</td><td><code>noreply_서비스명@kakaocorp.com</code> 사용 (발송자 등록 필수)</td></tr>
+  </tbody>
+</table>
+</div>
+
+<p><strong>주소 사용 규칙</strong></p>
+<ul>
+  <li><strong>Daum 서비스</strong>: <code>noreply_서비스명@daum.net</code> 이나 <code>noreply_서비스명@hanmail.net</code> 은 <strong>사용 불가</strong></li>
+  <li><strong>카카오 서비스</strong>: <code>noreply_서비스명@kakaocorp.com</code> 을 등록해 사용하시는 것을 권장</li>
+  <li>공용 발송계정이 필요하다면 <code>noreply@kakaocorp.com</code> 은 별도 등록없이 사용가능</li>
+  <li><code>id@kakao.com</code> 의 형태는 사용불가 (고객이 사용가능한 도메인은 사용불가)</li>
+  <li>자회사 등에 별도 도메인이 있는 경우 <code>noreply_서비스명@해당도메인</code> 사용 권장
+    <ul><li>단 해당도메인은 MX, TXT (SPF, DKIM) 설정이 되어 있어야 다음메일 외 타사(ex. Gmail …) 로의 전송이 원활함</li></ul>
+  </li>
+</ul>
+
+<h2>메일발송서버와 용도</h2>
+
+<div class="table-wrap">
+<table>
+  <thead>
+    <tr><th>도메인</th><th class="col-narrow">포트</th><th>용도</th><th>사용제한</th><th>기타</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>mail-kmh-relay.daumkakao.io</code></td>
+      <td>25</td>
+      <td>일반적인 메일 발송 시 사용합니다.<br>사용예) 시스템 모니터링 결과 메일 등<br>발송결과조회 API 제공 – Urania – Restful API</td>
+      <td>사설IP 대역 (10 대역)은 모두 오픈되어 있습니다.<br>공인 IP대역에서 사용시 ACL 신청이 필요합니다.</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td><code>mt.mail.daum.net</code></td>
+      <td>25</td>
+      <td>주요공지, 인증메일, CS답변 등 메일 발송 서버입니다.<br>다음메일 유저인 경우 휴면이나 수신거부를 무시합니다.<br>다음메일 웹에서 볼 때 관리자 아이콘이 박힙니다.</td>
+      <td>사설IP 대역 (10 대역)은 모두 오픈되어 있습니다.<br>공인 IP대역에서 사용시 ACL 신청이 필요합니다.</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td><code>lc.mail.daum.net</code> <span class="badge dep">deprecated</span></td>
+      <td>25</td>
+      <td>일반적인 메일 발송 시 사용. 시스템 모니터링 결과 수신 등에 활용 가능.<br><code>mail-kmh-relay.daumkakao.io</code> 로 대체 중.</td>
+      <td>사설IP 대역 (10 대역)은 모두 오픈되어 있습니다.<br>공인 IP대역에서 사용시 ACL 신청이 필요합니다.</td>
+      <td><code>mail-kmh-relay.daumkakao.io</code> 로 대체 하시기 바랍니다.</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<p><code>lc.mail.daum.net</code> (구 <code>hm-local.hanmail.net</code>) → <code>mail-kmh-relay.daumkakao.io</code> 변경 가이드</p>
+
+<h2>발송결과확인</h2>
+<p><a href="/kmh-send-result-api">KMH 발송결과확인 API</a></p>
+
+<h2>메일발송서버 ACL (IP Allow) 요청 <span class="badge opt">공인 IP인 경우만 해당</span></h2>
+<ul>
+  <li>사설IP 대역 (10 대역)은 모두 오픈 되어 있습니다.</li>
+  <li>공인IP사용 서버인 경우 사용하실 서버의 IP (Client IP) 를 메일발송 서버에 IP Allow 요청하여야 합니다.</li>
+  <li>접근서버 IP, 부서명, 담당자의 daumin ID, 사용목적을 아지트
+    <a href="https://kakao.agit.in/g/300000811/wall">https://kakao.agit.in/g/300000811/wall</a> 에
+    “<strong>메일 발송서버 IP allow 요청</strong>” 양식으로 요청합니다.</li>
+</ul>
+
+<h3>ip allow 확인 방법</h3>
+<div class="codeblock">
+  <div class="codeblock-head"><span class="codeblock-lang">shell — mail-kmh-relay.daumkakao.io</span></div>
+<pre><code># ip allow 안된 케이스
+$ nc mail-kmh-relay.daumkakao.io 25
+554 5.7.1 CACC 114.108.152.207: Connection refused. Your IP address is not allowed
+
+# ip allow 되어 있는 케이스
+$ nc mail-kmh-relay.daumkakao.io 25
+220 mail-kmh-relay1.pg1.krane.9rum.cc ESMTP welcome to HanMail.Net(tm) ready</code></pre>
+</div>
+
+<h2>메일발송방법</h2>
+<ul>
+  <li>SMTP 프로토콜을 이용해서 메일을 발송하기 때문에 SMTP 를 이용하는 <strong>어떠한 라이브러리라도 사용 가능</strong>합니다.</li>
+  <li><code>mail-kmh-relay.daumkakao.io</code> 서버를 이용하신다면
+    <ul>
+      <li>SMTP 서버는 <code>mail-kmh-relay.daumkakao.io</code> (mtmail 이용시 <code>mt.mail.daum.net</code>)</li>
+      <li>SMTP 포트는 <code>25</code> 로 설정 하시면 됩니다.</li>
+    </ul>
+  </li>
+</ul>
+
+<div class="callout info">
+  <span class="callout-icon">ℹ️</span>
+  <div class="callout-body">
+    ay1 리전에 생성한 서버인 경우 <strong>pass</strong>
+    (<a href="https://infrasec.daumkakao.io/approval/pass">https://infrasec.daumkakao.io/approval/pass</a>)
+    라는 시스템을 사용해서 포트를 열어 주어야 사용 가능합니다.<br>
+    참고: <a href="https://kakao.agit.in/g/300023877/wall/320897324">https://kakao.agit.in/g/300023877/wall/320897324</a>
+  </div>
+</div>
+
+<div class="callout danger">
+  <span class="callout-icon">🚫</span>
+  <div class="callout-body">
+    영리목적의 광고성 정보 발송 시, 반드시 제목 및 내용 작성 방법 가이드를 준수해주시기 바랍니다.<br>
+    필독: <a href="#ad-mail-consent">메일발송서버 이용가이드 – 광고메일 발송은 수신에 동의한 사용자에게만 발송</a>
+  </div>
+</div>
+
+<h3>개발 언어별 샘플코드</h3>
+<p>개발 언어나 환경에 따라 발송하는 방법을 작성한 샘플코드 입니다.</p>
+<div class="cards">
+  <a class="card" href="/java"><div class="card-title">java</div><div class="card-desc">Spring / Commons Email / JavaMail</div></a>
+  <a class="card" href="/shell"><div class="card-title">shell</div><div class="card-desc">telnet 으로 SMTP 세션 직접 확인</div></a>
+  <a class="card" href="/perl"><div class="card-title">perl language</div><div class="card-desc">Net::SMTP, MIME::Lite</div></a>
+  <a class="card" href="/ruby"><div class="card-title">ruby language</div><div class="card-desc">Net::SMTP</div></a>
+  <a class="card" href="/python"><div class="card-title">python</div><div class="card-desc">smtplib, MIMEText</div></a>
+  <a class="card" href="/r"><div class="card-title">R</div><div class="card-desc">mailR 패키지</div></a>
+  <a class="card" href="/c"><div class="card-title">c</div><div class="card-desc">libcurl, gnu mailutils, hm libs</div></a>
+</div>
+
+<h2>이메일을 더 잘 발송하기 위한 설정 방법</h2>
+<p>
+  이메일을 대량으로 발송하게 되면 수신측에서는 각자 고유의 스팸룰로 스팸메일 여부를 판단하게 됩니다.
+  그럴 때 활용하는 방식에 SPF, DKIM, DMARC 등의 기법이 있습니다.
+</p>
+<ul>
+  <li>발송한 메일을 수신측에서 잘 받아 주지 않을 때 일단 <strong>SPF</strong> 적용 상태를 확인 해 보는 것이 좋습니다. 많은 메일 서비스들에서 SPF 검사를 하는 편입니다.</li>
+  <li>SPF 가 잘 적용되었음에도 불구하고 잘 안받아 준다면 <strong>DKIM</strong> 까지 적용을 고려해 보는 것이 좋습니다.
+    (gmail 이나 yahoo 등 큰 메일 서비스 업체에서는 DKIM 여부를 반영하기도 합니다.)</li>
+  <li><strong>DMARC</strong> 는 SPF 와 DKIM 의 적용 강도를 설정하고 수신측에서 수집한 데이터로 리포트를 만들어서 발송측에 보내주는 기능을 합니다.
+    수신측의 통계를 보고 발송측에서 발송을 조절하거나, 인증되지 않은 메일 비율 등을 확인하는데 사용할 수 있습니다.</li>
+</ul>
+
+<h3>SPF</h3>
+<p>
+  SPF 란 도메인의 TXT 레코드에 발송 서버의 IP 를 기록해 두어, 수신측에서 SPF 에 등록된 서버에서 메일이 전송된 경우
+  메일을 좀 더 신뢰 할 수 있도록 만드는 방법입니다.
+</p>
+<p><code>daum.net</code>, <code>hanmail.net</code> 등의 도메인에는 이미 SPF 가 적용 되어 있습니다.</p>
+<div class="codeblock">
+  <div class="codeblock-head"><span class="codeblock-lang">shell</span></div>
+<pre><code>$ dig txt daum.net +short
+"v=spf1 include:_spf.daum.net ~all"</code></pre>
+</div>
+<p>SPF 가 설정 되어 있지 않은 도메인으로 메일을 발송할 경우 수신측에서 잘 받아 주지 않을 가능성이 있으니 SPF 를 세팅해주길 권장합니다.</p>
+<div class="callout info">
+  <span class="callout-icon">ℹ️</span>
+  <div class="callout-body">
+    SPF 설정 요청은 “인프라 시스템 업무 (요청 및 작업지원)” 아지트를 통해서 요청 하시면 됩니다.<br>
+    e.g. 2018.09.03 <code>kakaopage.com</code> 요청 —
+    <a href="https://kakao.agit.in/g/238059/wall/316086463">https://kakao.agit.in/g/238059/wall/316086463</a>
+  </div>
+</div>
+
+<h3>DKIM</h3>
+<p>
+  DKIM 은 도메인에 public key 를 등록해 두고, 메일을 발송 할 때 private key 와 메일의 헤더정보를 이용하여
+  DKIM header 를 붙여서 메일을 발송 하면 수신측에서 DKIM header 정보와 도메인의 DKIM public key 로 확인해서
+  이메일을 인증하는 방식입니다.
+</p>
+<p>DKIM 설정이 필요한 경우 <a href="/dkim">DKIM (DomainKeys Identified Mail)</a> 내용을 참고 하도록 합니다.</p>
+
+<h3>DMARC</h3>
+<p>DMARC 는 SPF 와 DKIM 의 적용 강도를 설정하고, 수신측에서 수집한 데이터로 만든 리포트를 발송측에 전달하는 기능을 합니다.</p>
+
+<h2>발송주소 화이트리스트 테스트 및 확인 방법</h2>
+
+<h3>테스트방법</h3>
+<ul>
+  <li>메일발송 후 발송 성공/실패 확인은 “<strong>발송결과조회</strong>” 후 <code>result</code> / <code>message</code> 항목 확인</li>
+  <li><a href="http://mail-kmh-dev.pg1.krane.9rum.cc:3000/">http://mail-kmh-dev.pg1.krane.9rum.cc:3000/</a></li>
+</ul>
+
+<h3>화이트리스트 확인 방법</h3>
+<ul>
+  <li>아래 redis 서버 <strong>1번 디비</strong>에서 조회 가능
+    (key: 사용자발송주소, value: 해당 데이터가 들어간 날짜, 현재 별도의 데이터 조회툴 없음)</li>
+  <li><code>dmail-hermes.redis.daumkakao.io</code></li>
+</ul>
+
+<h2>Q&amp;A</h2>
+<dl class="deflist">
+  <dt>외부로도 메일 발송 가능한가요?</dt>
+  <dd>가능합니다.</dd>
+  <dt>외부 인프라에서 사용 가능한가요?</dt>
+  <dd>안됩니다. 내부 인프라에서만 사용할 수 있습니다.</dd>
+</dl>
+
+<h2>하위 페이지</h2>
+<div class="cards">
+  <a class="card" href="/dkim"><div class="card-title">DKIM 설정 가이드</div><div class="card-desc">DKIM 개념과 설정 작업 순서</div></a>
+  <a class="card" href="/kmh-send-result-api"><div class="card-title">KMH 발송결과확인 API</div><div class="card-desc">발송 로그 조회 API 규격</div></a>
+  <a class="card" href="/c"><div class="card-title">메일발송서버 이용가이드 - c</div><div class="card-desc">libcurl / gnu mailutils / hm libs</div></a>
+  <a class="card" href="/java"><div class="card-title">메일발송서버 이용가이드 - java</div><div class="card-desc">Spring, Commons Email, JavaMail</div></a>
+  <a class="card" href="/perl"><div class="card-title">메일발송서버 이용가이드 - perl language</div><div class="card-desc">Net::SMTP, MIME::Lite</div></a>
+  <a class="card" href="/python"><div class="card-title">메일발송서버 이용가이드 - python</div><div class="card-desc">smtplib, MIMEText</div></a>
+  <a class="card" href="/r"><div class="card-title">메일발송서버 이용가이드 - R</div><div class="card-desc">mailR</div></a>
+  <a class="card" href="/ruby"><div class="card-title">메일발송서버 이용가이드 - ruby language</div><div class="card-desc">Net::SMTP</div></a>
+  <a class="card" href="/shell"><div class="card-title">메일발송서버 이용가이드 - shell</div><div class="card-desc">telnet SMTP 세션</div></a>
+  <a class="card" href="/one-click-unsubscribe"><div class="card-title">원클릭 수신거부 설정 가이드</div><div class="card-desc">Gmail 발신자 가이드라인 대응</div></a>
+</div>

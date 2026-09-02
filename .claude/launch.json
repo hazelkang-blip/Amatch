@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "mail-guide",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["mail-guide/serve.mjs"],
+      "port": 4321
+    }
+  ]
+}

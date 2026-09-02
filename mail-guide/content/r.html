@@ -1,0 +1,30 @@
+<h1>메일발송서버 이용가이드 - R</h1>
+<p class="lede">R 에서 메일 발송 할 때 예시</p>
+
+<h2>개요</h2>
+<ul>
+  <li>R 에서 메일 발송 할 때 예시</li>
+  <li><a href="https://github.com/rpremraj/mailR">https://github.com/rpremraj/mailR</a></li>
+</ul>
+
+<div class="callout warn">
+  <span class="callout-icon">⚠️</span>
+  <div class="callout-body">
+    utf-8 로 메일 발송 시 <code>encoding = "utf-8"</code> 옵션을 꼭 추가 해 주도록 하자
+  </div>
+</div>
+
+<h2>example</h2>
+<div class="codeblock">
+  <div class="codeblock-head"><span class="codeblock-lang">r — mailR::send.mail</span></div>
+<pre><code>send.mail(from = "sender@daumcorp.com",
+          to = c("Recipient 1 &lt;recipient1@daumcorp.com&gt;", "recipient2@daumcorp.com"),
+          cc = c("CC Recipient &lt;cc.recipient@daumcorp.com&gt;"),
+          bcc = c("BCC Recipient &lt;bcc.recipient@daumcorp.com&gt;"),
+          subject = "Subject of the email",
+          body = "Body of the email",
+          encoding = "utf-8",
+          smtp = list(host.name = "mail-kmh-relay.daumkakao.io", port = 25),
+          authenticate = FALSE,
+          send = TRUE)</code></pre>
+</div>

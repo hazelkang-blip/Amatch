@@ -1,0 +1,100 @@
+<h1>다른버전 이용자를 위한 가이드</h1>
+<p class="lede">사내 메일 발송 라이브러리가 크게 두 갈래로 나뉘어 있습니다. 두 계열의 차이점과 마이그레이션 방법을 정리했습니다.</p>
+
+<h2>다른버전 이용자를 위한 가이드</h2>
+<ul>
+  <li>라이브러리가 크게 두가지 갈래를 가지고 있는 것으로 보입니다. (오래된 히스토리라 파악이 힘드네요)</li>
+  <li>현 메일팀의 라이브러리와는 다소 차이가 있는 거 같아 차이점에 대해 다뤄 보는 페이지를 만들었습니다.</li>
+  <li>만약 마이그레이션을 하게 되면 <strong>꼼꼼하게 테스트</strong> 부탁드립니다.</li>
+  <li>보충할 내용이 있으시면 댓글 등으로 제보 부탁드립니다.</li>
+</ul>
+
+<div class="callout warn">
+  <span class="callout-icon">⚠️</span>
+  <div class="callout-body">
+    라이브러리를 모두 까보고 테스트 해 본것이 아니기 때문에 일부 내용이 틀리거나 오류가 있을 수 있습니다. 제보 부탁드립니다.
+  </div>
+</div>
+
+<h2>2005년 개발자 포럼을 통해 배포된 버전</h2>
+<ul>
+  <li><a href="http://daumin.daumcorp.com/dna/forum/viewtopic.php?t=947&amp;highlight=daum_mail">개발자 포럼</a>을 통해 배포된 것으로 보입니다.</li>
+  <li><code>setToHeader</code>, <code>setReplyFlag</code>, <code>setEnvFromNullAccount</code> 함수가 존재하며
+    <code>send()</code> 함수의 리턴타입이 <code>int</code> 입니다.</li>
+  <li>여러팀을 거쳐 다양한 maven 위치에 존재하는 것으로 보입니다.</li>
+</ul>
+
+<h4>검색유닛</h4>
+<div class="codeblock">
+  <div class="codeblock-head"><span class="codeblock-lang">xml — pom.xml</span></div>
+<pre><code>&lt;dependency&gt;
+  &lt;groupId&gt;net.daum.search&lt;/groupId&gt;
+  &lt;artifactId&gt;daum_mail_old&lt;/artifactId&gt;
+  &lt;version&gt;1.0&lt;/version&gt;
+  &lt;scope&gt;compile&lt;/scope&gt;
+&lt;/dependency&gt;</code></pre>
+</div>
+
+<h4>비즈개발유닛</h4>
+<div class="codeblock">
+  <div class="codeblock-head"><span class="codeblock-lang">xml — pom.xml</span></div>
+<pre><code>&lt;dependency&gt;
+  &lt;groupId&gt;net.daum&lt;/groupId&gt;
+  &lt;artifactId&gt;daum_mail&lt;/artifactId&gt;
+  &lt;version&gt;1.0&lt;/version&gt;
+&lt;/dependency&gt;</code></pre>
+</div>
+
+<h2>현재 메일팀에서 배포하고 있는 버전</h2>
+<ul>
+  <li><a href="http://play.daumcorp.com/pages/viewpage.action?pageId=169347419">http://play.daumcorp.com/pages/viewpage.action?pageId=169347419</a></li>
+  <li><code>setToHeader</code>, <code>setReplyFlag</code>, <code>setEnvFromNullAccount</code> 함수가 <strong>존재하지 않으며</strong>
+    <code>send()</code> 함수의 리턴타입이 <code>String</code> 입니다.</li>
+  <li>2010년 이홍연님의 버전으로 시작된 것으로 보이며
+    <a href="http://play.daumcorp.com/display/~lotus/daum_mail.jar">http://play.daumcorp.com/display/~lotus/daum_mail.jar</a></li>
+  <li>2011년 황현천님과 김재영님을 통해 maven 등록 된 것으로 보입니다.
+    <a href="http://play.daumcorp.com/pages/viewpage.action?pageId=43355791">http://play.daumcorp.com/pages/viewpage.action?pageId=43355791</a></li>
+</ul>
+
+<h2>현재 메일팀에서 배포하는 버전으로 바꾸고 싶다면</h2>
+
+<h3>msg.setReplyFlag(false); 와 msg.setEnvFromNullAccount(true); 는 삭제</h3>
+<div class="codeblock">
+  <div class="codeblock-head"><span class="codeblock-lang">java — 삭제 대상</span></div>
+<pre><code>msg.setReplyFlag(false);
+msg.setEnvFromNullAccount(true);</code></pre>
+</div>
+<ul>
+  <li>해당 코드의 역할은 mail from 주소를 <code>returnmaster@hanmail.net</code> 으로 바꾸어 주는 역할을 합니다.
+    (header from 은 바꾸지 않습니다.)</li>
+  <li>테스트 해 본 결과 header from 은 바뀌지 않기 때문에 위 두 줄을 다른 코드로 대체하려 하시면 안됩니다.</li>
+  <li>그냥 위의 두 줄을 <strong>삭제</strong> 해 주시면 됩니다.</li>
+</ul>
+
+<h3>send 함수의 리턴값</h3>
+<ul>
+  <li>메일 발송 후 최종 결과 정보를 <code>String</code> 으로 리턴 합니다.</li>
+</ul>
+<div class="codeblock">
+  <div class="codeblock-head"><span class="codeblock-lang">return value</span></div>
+<pre><code>250 2.0.0 s24AXc3t019941 Message accepted for delivery</code></pre>
+</div>
+<ul>
+  <li>정상적으로 값을 리턴 받았다면 <strong>성공</strong>으로 판단하시면 됩니다.</li>
+  <li>그렇지 않다면 <code>HMException</code> 이 발생하기 때문에 해당 예외처리를 catch 하면 <strong>실패</strong>로 판단하시면 됩니다.</li>
+</ul>
+
+<h3>base64Encoder 관련 부분</h3>
+<ul>
+  <li>메일팀에서 배포중인 라이브러리에서는 해당 기능을 내장하고 있기 때문에 관련 처리 부분은 모두 삭제 해 주시면 됩니다.</li>
+</ul>
+
+<h3>hmmsg.setContentType("text/html; charset=\"EUC-KR\""); 삭제</h3>
+<div class="codeblock">
+  <div class="codeblock-head"><span class="codeblock-lang">java — 삭제 대상</span></div>
+<pre><code>hmmsg.setContentType("text/html; charset=\"EUC-KR\"");</code></pre>
+</div>
+<ul>
+  <li>구 라이브러리에서는 euc-kr 을 사용했지만 현재 라이브러리는 <strong>UTF-8</strong> 을 사용합니다.</li>
+  <li>해당 라인은 삭제 해 주시면 됩니다. 단, <strong>내용도 UTF-8 로 변환</strong>시켜 주시기 바랍니다.</li>
+</ul>

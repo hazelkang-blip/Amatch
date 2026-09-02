@@ -1,0 +1,76 @@
+<h1>메일발송서버 이용가이드 - perl language</h1>
+<p class="lede">perl 에서 메일발송서버 이용 예제 안내</p>
+
+<h2>개요</h2>
+<p>perl 에서 메일발송서버 이용 예제 안내</p>
+
+<h2>Net::SMTP 모듈 이용</h2>
+<div class="codeblock">
+  <div class="codeblock-head"><span class="codeblock-lang">perl</span></div>
+<pre><code>#!/usr/bin/perl -W
+use strict;
+use warnings;
+use Net::SMTP;
+
+my $smtp = Net::SMTP-&gt;new('mail-kmh-relay.daumkakao.io');
+$smtp-&gt;mail('wwl1400test@daum.net');
+$smtp-&gt;to('wwl1401test@daum.net');
+$smtp-&gt;data();
+$smtp-&gt;datasend("To: wwl1401test\@daum.net\n");
+$smtp-&gt;datasend("Subject: this is test mail for perl\n");
+$smtp-&gt;datasend("\n");
+$smtp-&gt;datasend("A simple test message\n");
+$smtp-&gt;dataend();
+$smtp-&gt;quit;</code></pre>
+</div>
+
+<h2>Mail::Send 모듈 이용</h2>
+<p><a href="http://search.cpan.org/~markov/MailTools-2.20/lib/Mail/Send.pod">http://search.cpan.org/~markov/MailTools-2.20/lib/Mail/Send.pod</a></p>
+
+<div class="callout warn">
+  <span class="callout-icon">⚠️</span>
+  <div class="callout-body">
+    <span class="callout-title">Mail::Send 사용은 권장하지 않음</span>
+    MAIL FROM 을 지정할 기능이 없어서 환경변수를 이용하고 있음.
+  </div>
+</div>
+
+<p>ex)</p>
+<div class="codeblock">
+  <div class="codeblock-head"><span class="codeblock-lang">perl</span></div>
+<pre><code>$ENV{MAILADDRESS} = 'notice-master@daum.net';</code></pre>
+</div>
+<p><code>premium_script</code> 에서 이런식으로 사용중이라 바꿔야 됨</p>
+
+<h2>MIME 처리</h2>
+
+<h3>MIME::Lite</h3>
+<p><code>mta6_cgi</code> sendmail 참고</p>
+<div class="codeblock">
+  <div class="codeblock-head"><span class="codeblock-lang">perl — MIME::Lite</span></div>
+<pre><code>use MIME::Lite;
+
+my $msg = mime_msg($header_from, $to, $subject, $contents);
+$raw_msg = $msg-&gt;as_string;
+
+sub mime_msg {
+    my $from = shift;
+    my $to = shift;
+    my $subject = shift;
+    my $contents = shift;
+
+    my $msg = MIME::Lite-&gt;new(
+        From    =&gt; $header_from,
+        To      =&gt; $to,
+        Subject =&gt; $subject,
+        Type    =&gt; 'multipart/mixed'
+    );
+
+    $msg-&gt;attach(
+        Type     =&gt; 'TEXT',
+        Data     =&gt; $contents
+    );
+
+    return $msg;
+}</code></pre>
+</div>

@@ -1,0 +1,183 @@
+<h1>libcurl smtp</h1>
+<p class="lede">curl 이 smtp 도 지원한다. 사용법이 비교적 간단한 편이다.</p>
+
+<h2>개요</h2>
+<p>기본예제: <a href="https://curl.haxx.se/libcurl/c/smtp-mail.html">https://curl.haxx.se/libcurl/c/smtp-mail.html</a></p>
+
+<div class="codeblock">
+  <div class="codeblock-head"><span class="codeblock-lang">c — smtp-mail.c (기본예제)</span></div>
+<pre><code>#include &lt;stdio.h&gt;
+#include &lt;string.h&gt;
+#include &lt;curl/curl.h&gt;
+
+#define FROM_ADDR    "&lt;sender@example.org&gt;"
+#define TO_ADDR      "&lt;addressee@example.net&gt;"
+#define CC_ADDR      "&lt;info@example.org&gt;"
+
+#define FROM_MAIL "Sender Person " FROM_ADDR
+#define TO_MAIL   "A Receiver " TO_ADDR
+#define CC_MAIL   "John CC Smith " CC_ADDR
+
+static const char *payload_text[] = {
+  "Date: Mon, 29 Nov 2010 21:54:29 +1100\r\n",
+  "To: " TO_MAIL "\r\n",
+  "From: " FROM_MAIL "\r\n",
+  "Cc: " CC_MAIL "\r\n",
+  "Message-ID: &lt;dcd7cb36-11db-487a-9f3a-e652a9458efd@"
+  "rfcpedant.example.org&gt;\r\n",
+  "Subject: SMTP example message\r\n",
+  "\r\n", /* empty line to divide headers from body, see RFC5322 */
+  "The body of the message starts here.\r\n",
+  "\r\n",
+  "It could be a lot of lines, could be MIME encoded, whatever.\r\n",
+  "Check RFC5322.\r\n",
+  NULL
+};
+
+struct upload_status {
+  int lines_read;
+};
+
+static size_t payload_source(void *ptr, size_t size, size_t nmemb, void *userp)
+{
+  struct upload_status *upload_ctx = (struct upload_status *)userp;
+  const char *data;
+
+  if((size == 0) || (nmemb == 0) || ((size*nmemb) &lt; 1)) {
+    return 0;
+  }
+
+  data = payload_text[upload_ctx-&gt;lines_read];
+
+  if(data) {
+    size_t len = strlen(data);
+    memcpy(ptr, data, len);
+    upload_ctx-&gt;lines_read++;
+
+    return len;
+  }
+
+  return 0;
+}
+
+int main(void)
+{
+  CURL *curl;
+  CURLcode res = CURLE_OK;
+  struct curl_slist *recipients = NULL;
+  struct upload_status upload_ctx;
+
+  upload_ctx.lines_read = 0;
+
+  curl = curl_easy_init();
+  if(curl) {
+    curl_easy_setopt(curl, CURLOPT_URL, "smtp://mail.example.com");
+
+    curl_easy_setopt(curl, CURLOPT_MAIL_FROM, FROM_ADDR);
+
+    recipients = curl_slist_append(recipients, TO_ADDR);
+    recipients = curl_slist_append(recipients, CC_ADDR);
+    curl_easy_setopt(curl, CURLOPT_MAIL_RCPT, recipients);
+
+    curl_easy_setopt(curl, CURLOPT_READFUNCTION, payload_source);
+    curl_easy_setopt(curl, CURLOPT_READDATA, &amp;upload_ctx);
+    curl_easy_setopt(curl, CURLOPT_UPLOAD, 1L);
+
+    res = curl_easy_perform(curl);
+
+    if(res != CURLE_OK)
+      fprintf(stderr, "curl_easy_perform() failed: %s\n",
+              curl_easy_strerror(res));
+
+    curl_slist_free_all(recipients);
+
+    curl_easy_cleanup(curl);
+  }
+
+  return (int)res;
+}</code></pre>
+</div>
+
+<h3>응용해서 만든 다른 예제</h3>
+
+<div class="codeblock">
+  <div class="codeblock-head"><span class="codeblock-lang">c — sendmail_to_kmh</span></div>
+<pre><code>#include &lt;curl/curl.h&gt;
+
+int sendmail_to_kmh(const char *from, char **recv, const char *filepath) {
+    CURL *curl;
+    CURLcode res = CURLE_OK;
+    struct curl_slist *recipients = NULL;
+
+    curl = curl_easy_init();
+    if (curl) {
+        // smtp server
+        curl_easy_setopt(curl, CURLOPT_URL, "smtp://mail-kmh-relay.daumkakao.io:25");
+
+        // from
+        curl_easy_setopt(curl, CURLOPT_MAIL_FROM, from);
+
+        // recipients
+        int i = 0;
+        while (recv[i] != NULL) {
+            if (recv[i][0] == '\0') {
+                i++;
+                continue;
+            }
+            recipients = curl_slist_append(recipients, recv[i++]);
+        }
+        curl_easy_setopt(curl, CURLOPT_MAIL_RCPT, recipients);
+
+        // body
+        FILE *fp;
+        fp = fopen(filepath, "r");
+        curl_easy_setopt(curl, CURLOPT_READDATA, fp);
+        curl_easy_setopt(curl, CURLOPT_UPLOAD, 1L);
+        // curl_easy_setopt(curl, CURLOPT_VERBOSE, 1); // debug
+
+        // send
+        res = curl_easy_perform(curl);
+        if (res != CURLE_OK)
+            fprintf(stderr, "curl_easy_perform() failed: %s\n",
+                    curl_easy_strerror(res));
+
+        curl_slist_free_all(recipients);
+
+        // quit and clean
+        curl_easy_cleanup(curl);
+        fclose(fp);
+    }
+    return (int) res;
+}
+
+int main() {
+    const char* filepath = "test.eml";
+    const char* from = "wwl1400test@daum.net";
+    char *recv[] = {
+            "wwl1401test@daum.net",
+            "wwl1402test@daum.net",
+            NULL
+    };
+    int status_code = sendmail_using_hmail(from, recv, filepath);
+    printf("return code=%d\n", status_code);
+    return 0;
+}</code></pre>
+</div>
+
+<div class="codeblock">
+  <div class="codeblock-head"><span class="codeblock-lang">test.eml</span></div>
+<pre><code>Subject: this is test mail for test_hm_mail_send
+from: wwl1400test@daum.net
+to: wwl1401test@daum.net, wwl1402test@daum.net
+
+1. this is test content. this is test content. this is test content</code></pre>
+</div>
+
+<h2>주의</h2>
+<div class="callout warn">
+  <span class="callout-icon">⚠️</span>
+  <div class="callout-body">
+    multiple recipients 기능을 사용할 경우 <strong>한명이라도 실패하면 모두 실패</strong>하는 문제가 있으니 참고<br>
+    <a href="https://github.com/curl/curl/issues/2483">https://github.com/curl/curl/issues/2483</a>
+  </div>
+</div>

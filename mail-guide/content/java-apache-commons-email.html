@@ -1,0 +1,63 @@
+<h1>Apache Commons Email</h1>
+<p class="lede">Apache Commons Email 라이브러리를 이용한 메일 발송 예제입니다.</p>
+
+<h2>개요</h2>
+<ul>
+  <li><a href="https://commons.apache.org/proper/commons-email/">https://commons.apache.org/proper/commons-email/</a></li>
+  <li><a href="http://commons.apache.org/proper/commons-email/userguide.html">http://commons.apache.org/proper/commons-email/userguide.html</a></li>
+  <li><a href="https://mvnrepository.com/artifact/org.apache.commons/commons-email">https://mvnrepository.com/artifact/org.apache.commons/commons-email</a></li>
+</ul>
+
+<div class="codeblock">
+  <div class="codeblock-head"><span class="codeblock-lang">xml — pom.xml</span></div>
+<pre><code>&lt;dependency&gt;
+    &lt;groupId&gt;org.apache.commons&lt;/groupId&gt;
+    &lt;artifactId&gt;commons-email&lt;/artifactId&gt;
+    &lt;version&gt;1.5&lt;/version&gt;
+&lt;/dependency&gt;</code></pre>
+</div>
+
+<h2>일반 메일 발송 예제</h2>
+<div class="codeblock">
+  <div class="codeblock-head"><span class="codeblock-lang">java — SimpleEmail</span></div>
+<pre><code>Email email = new SimpleEmail();
+email.setHostName("mail-kmh-relay.daumkakao.io");
+email.setFrom("notice-master@daum.net");
+email.setSubject("TestMail");
+email.setMsg("This is a test mail ... :-)");
+email.addTo("wwl1401test@daum.net");
+email.send();</code></pre>
+</div>
+
+<h2>첨부 파일 메일 발송 예제</h2>
+<div class="codeblock">
+  <div class="codeblock-head"><span class="codeblock-lang">java — MultiPartEmail</span></div>
+<pre><code>// Create the attachment
+EmailAttachment attachment = new EmailAttachment();
+attachment.setPath("mypictures/john.jpg");
+attachment.setDisposition(EmailAttachment.ATTACHMENT);
+attachment.setDescription("Picture of John");
+attachment.setName("John");
+
+// Create the email message
+MultiPartEmail email = new MultiPartEmail();
+email.setHostName("mail-kmh-relay.daumkakao.io");
+email.addTo("wwl1401test@daum.net", "wwl1401test");
+email.setFrom("mta1test@daum.net", "mta1test");
+email.setSubject("The picture");
+email.setMsg("Here is the picture you wanted");
+
+// add the attachment
+email.attach(attachment);
+
+// send the email
+email.send();</code></pre>
+</div>
+
+<div class="callout info">
+  <span class="callout-icon">ℹ️</span>
+  <div class="callout-body">
+    제목에 한글이 들어갈 때 공백이 <code>_</code> 로 바뀌는 이슈는
+    <a href="/java#제목에-공백대신-가-생기는-경우">메일발송서버 이용가이드 - java</a> 의 해당 항목을 참고하세요.
+  </div>
+</div>

@@ -1,0 +1,182 @@
+<h1>KMH 발송결과확인 API</h1>
+<p class="lede">kmh를 사용하여 메일을 발송할 경우 발송 결과 확인을 해 볼 수 있습니다.</p>
+
+<h2>개요</h2>
+<ul>
+  <li>kmh를 사용하여 메일을 발송할 경우 발송 결과 확인을 해 볼 수 있습니다.</li>
+  <li>단, 로그 보관 기간의 제약으로 <strong>최근 1달의 로그만 조회 가능</strong>합니다.</li>
+</ul>
+
+<h2>접속정보</h2>
+
+<h3>cbt</h3>
+<div class="codeblock">
+  <div class="codeblock-head"><span class="codeblock-lang">url</span></div>
+<pre><code>http://mail-kmh.cbt.onkakao.net/v1/kmh/sendlogs?from=noreply@kakaocorp.com&amp;to=poet.me@kakaocorp.com</code></pre>
+</div>
+
+<h3>prod</h3>
+<div class="codeblock">
+  <div class="codeblock-head"><span class="codeblock-lang">url</span></div>
+<pre><code>http://mail-kmh.onkakao.net/v1/kmh/sendlogs?from=noreply@kakaocorp.com&amp;to=poet.me@kakaocorp.com</code></pre>
+</div>
+
+<h2>발송결과확인 API</h2>
+<p>kmh 를 사용할 경우 발송 결과 확인 API 로 발송결과를 확인해 볼 수 있습니다.</p>
+
+<h3 id="new-api">향후 변경될(cstool-kmh) kmh 발송로그조회 API</h3>
+<p><span class="badge">22년 11월 베타테스트</span> <span class="badge">22년 12/12 오픈확정</span></p>
+<p>API domain/path는 변경되지만, client 변경을 최소화하기 위해 가급적 기존 response body는 유지함.</p>
+
+<div class="codeblock">
+  <div class="codeblock-head"><span class="codeblock-lang">Request Path</span></div>
+<pre><code>GET http://mail-kmh.onkakao.net/v1/kmh/sendlogs</code></pre>
+</div>
+
+<h4>request parameter</h4>
+<div class="callout warn">
+  <span class="callout-icon">⚠️</span>
+  <div class="callout-body">
+    <span class="callout-title">API 조회시 주의사항</span>
+    <ol>
+      <li>조회시 <code>from</code> / <code>to</code> 파라미터는 반드시 있어야 함. (필수)</li>
+      <li>조회 시작과 끝날짜가 없다면 기본적으로 현재날짜 기준 “<strong>7일전</strong>”까지만 조회됨.</li>
+      <li>조회시작날짜가 조회끝날짜 이전이어야 함.</li>
+      <li>조회가능날짜범위는 현재날짜부터 <strong>31일 전</strong>까지임 (한달만 조회 가능)
+        <ul>
+          <li><code>startDate</code> / <code>endDate</code> 는 현재날짜부터 31일 이전은 조회 불가능</li>
+          <li>예: 현재날짜가 2022년 2월 7일이라면 <code>startDate</code> / <code>endDate</code> 는 2022년 1월 7일 이후만 가능</li>
+        </ul>
+      </li>
+    </ol>
+  </div>
+</div>
+
+<div class="table-wrap">
+<table>
+  <thead>
+    <tr><th class="col-narrow">name</th><th class="col-narrow">type</th><th class="col-narrow">필수여부</th><th>description</th><th>예시값</th></tr>
+  </thead>
+  <tbody>
+    <tr><td class="nowrap"><code>from</code></td><td class="nowrap">string</td><td><span class="badge req">required</span></td>
+      <td>조회할 발신자 이메일주소.</td><td><code>noreply@kakocorp.com</code></td></tr>
+    <tr><td class="nowrap"><code>to</code></td><td class="nowrap">string</td><td><span class="badge req">required</span></td>
+      <td>조회할 수신자 이메일 주소</td><td><code>poet.me@kakaocorp.com</code></td></tr>
+    <tr><td class="nowrap"><code>startDate</code></td><td class="nowrap">string</td><td><span class="badge opt">optional</span></td>
+      <td>조회시작날짜(<code>yyyymmdd</code>), 조회끝날짜(<code>endDate</code>) 없으면 조회끝날짜는 현재날짜로 세팅됨</td><td><code>20220101</code></td></tr>
+    <tr><td class="nowrap"><code>endDate</code></td><td class="nowrap">string</td><td><span class="badge opt">optional</span></td>
+      <td>조회끝날짜(<code>yyyymmdd</code>), 조회시작날짜(<code>startDate</code>) 없으면 조회시작날짜는 현재날짜부터 7일전으로 세팅됨</td><td><code>20220130</code></td></tr>
+  </tbody>
+</table>
+</div>
+
+<h4>response body (기존 응답과 변화 없음)</h4>
+<div class="codeblock">
+  <div class="codeblock-head"><span class="codeblock-lang">Response Body</span></div>
+<pre><code>{
+    "results" : [
+        {
+            "from"            : string     // 발송자 이메일 주소
+            "to"              : string     // 수신자 이메일 주소
+            "result"          : string     // 발송 결과 (ex. FAIL, SUCCESS)
+            "message"         : string     // 발송 결과 메시지
+            "sender"          : string     // 발송 서비스 서버
+            "receiver"        : string     // 처음 전송받은 내부 릴레이 메일서버
+            "recvdttm"        : string     // receiver 서버가 받은 시각 (ex: 20211125110434)
+            "destination"     : string     // 최종 메일 전송 주소
+            "sentdttm"        : string     // 최종 발송 시각 (ex: 20211125110434)
+            "receiverRelayTo" : string     // 최종 발송 서버
+        },
+        {
+            "from"            : string     // 발송자 이메일 주소
+            "to"              : string     // 수신자 이메일 주소
+            "result"          : string     // 발송 결과 (ex. FAIL, SUCCESS)
+            "message"         : string     // 발송 결과 메시지
+            "sender"          : string     // 발송 서비스 서버
+            "receiver"        : string     // 처음 전송받은 내부 릴레이 메일서버
+            "recvdttm"        : string     // receiver 서버가 받은 시각 (ex: 20211125110434)
+            "destination"     : string     // 최종 메일 전송 주소
+            "sentdttm"        : string     // 최종 발송 시각 (ex: 20211125110434)
+            "receiverRelayTo" : string     // 최종 발송 서버
+        } ...
+    ]
+}</code></pre>
+</div>
+
+<h3>현재 서비스중인 kmh 발송로그조회 API <span class="badge dep">2022.12.11 종료예정</span></h3>
+<div class="callout warn">
+  <span class="callout-icon">⚠️</span>
+  <div class="callout-body">
+    현재 사용중인 API는 <a href="#new-api">향후 위에 변경될 API</a> 로 적용될 예정이오니 변경개발 부탁드립니다.
+  </div>
+</div>
+
+<div class="codeblock">
+  <div class="codeblock-head"><span class="codeblock-lang">Request Path</span></div>
+<pre><code>GET http://api.kmh.daumkakao.io/v1.3/sendlogs?to=&lt;수신자이메일&gt;</code></pre>
+</div>
+
+<p><code>results</code> 에 list 로 결과정보가 나옵니다.</p>
+
+<div class="codeblock">
+  <div class="codeblock-head"><span class="codeblock-lang">Response Body</span></div>
+<pre><code>{
+    "results" : [
+        "from"            : string     // 발송자 이메일 주소
+        "to"              : string     // 수신자 이메일 주소
+        "result"          : string     // 발송 결과 (ex. FAIL, SUCCESS)
+        "message"         : string     // 결과 메시지 - 실패 원인 확인 용도
+        "sender"          : string     // 발송 서비스 서버
+        "receiver"        : string     // 전송된 메일서버
+        "receiverRelayTo" : string     // 전송 목적지 서버. 현재 메일을 외부로 발송하는 서버로
+                                       //   내부로 발송한 경우는 값이 없다.
+        "recvdttm"        : string     // receiver 서버가 받은 시각
+        "destination"     : string     // 최종 전달 경로
+        "sentdttm"        : string     // 최종 발송 시각
+    ],
+    "offset" : string  // 조회 해 온 데이터 이후에 데이터가 더 있는 경우 offset 값이 있음.
+                       // offset 값이 있으면 이후 데이터를 조회 하고 싶으면
+                       // request parameter 에 offset 값을 넣어서 조회 한다.
+}</code></pre>
+</div>
+
+<h4>e.g.</h4>
+<div class="codeblock">
+  <div class="codeblock-head"><span class="codeblock-lang">example</span></div>
+<pre><code>http://api.kmh.daumkakao.io/v1.3/sendlogs?to=june.kim@kakaocorp.com
+
+{
+  "results": [
+    {
+      "from": "meetingroom@daumcorp.com",
+      "to": "june.kim@kakaocorp.com",
+      "result": "SUCCESS",
+      "message": "[Sniper] OK 1572496212 snipe-queue 12273",
+      "sender": "10.194.11.141",
+      "receiver": "mail-kmh-relay2.pg1.krane.9rum.cc",
+      "recvdttm": "20191031133003",
+      "destination": "spam.kakaocorp.com.",
+      "sentdttm": "20191031133013",
+      "receiverRelayTo": "mail-smail-vm104"
+    },
+    {
+      "from": "stone.k@kakaocorp.com",
+      "to": "june.kim@kakaocorp.com",
+      "result": "SUCCESS",
+      "message": "[Sniper] OK 1572490565 snipe-queue 25450",
+      "sender": "10.194.11.141",
+      "receiver": "mail-kmh-relay3.pg1.krane.9rum.cc",
+      "recvdttm": "20191031115557",
+      "destination": "spam.kakaocorp.com.",
+      "sentdttm": "20191031115605",
+      "receiverRelayTo": "mail-smail-vm107"
+    },
+    ...
+  ]
+}</code></pre>
+</div>
+
+<h2>발송로그조회툴</h2>
+<ul>
+  <li>beta – <a href="http://mail-kmh-dev.pg1.krane.9rum.cc:3000">http://mail-kmh-dev.pg1.krane.9rum.cc:3000</a></li>
+</ul>

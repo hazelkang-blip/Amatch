@@ -1,0 +1,12 @@
+{
+  "name": "mail-guide",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs && node build-single.mjs",
+    "build:site": "node build.mjs",
+    "build:single": "node build-single.mjs",
+    "dev": "node build.mjs && node build-single.mjs && node serve.mjs"
+  }
+}

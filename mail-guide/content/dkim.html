@@ -1,0 +1,130 @@
+<h1>DKIM 설정 가이드</h1>
+<p class="lede">해당 문서는 KMH 사용시 DKIM 설정 가이드입니다.</p>
+
+<div class="callout warn">
+  <span class="callout-icon">⚠️</span>
+  <div class="callout-body">
+    Gmail측에서 이메일 발신자 가이드 라인 정책을 강화합니다. <strong>2024년 4월부터 DKIM 설정이 되지 않은 경우 수신 제한</strong> 될 수 있으니
+    아래 가이드를 참고하셔서 DKIM 설정을 미리 준비해 두시길 권장 드립니다.<br>
+    &gt;&gt; 참고: Gmail 이메일 발신자 가이드라인
+  </div>
+</div>
+
+<h2>1. DKIM(DomainKeys Identified Mail) 이란?</h2>
+<ul>
+  <li>DKIM(DomainKeys Identified Mail)은 이메일 발신자가 이메일에 <strong>디지털 서명</strong>을 하여 발신자의 진위 여부를 확인하고,
+    전송 중에 메시지가 변조되지 않았는지 확인할 수 있는 이메일 인증 방법</li>
+  <li>DKIM을 통해 스팸 발송자 및 기타 악의적인 공격자가 이메일을 위조하는 것을 방지</li>
+</ul>
+
+<h2>2. DKIM의 구조</h2>
+<ul>
+  <li>DKIM은 <strong>공개 키 암호화</strong>를 기반으로 하는 디지털 서명 체계를 사용</li>
+  <li>발송 서버는 이메일 발송 시 이메일 발송자, 수신자, 제목, 내용 등을 비밀 키로 서명합니다.
+    이 서명 값을 <code>DKIM-Signature</code> 헤더(Header)에 추가</li>
+  <li>수신 서버는 <code>DKIM-Signature</code> 헤더 내 <code>d=</code> 필드로 기술된 도메인의 공개 키와 서명 알고리즘 정보 등이 담긴
+    DKIM 레코드를 조회하고, 이 값들을 이용해 수신된 이메일 <code>DKIM-Signature</code> 헤더의 디지털 서명을 검증</li>
+</ul>
+
+<h2>3. DKIM-Signature 구조</h2>
+<p>다음은 이메일 발송 시 이메일 헤더에 추가되는 DKIM 서명(<code>DKIM-Signature</code> 헤더) 예시</p>
+<div class="codeblock">
+  <div class="codeblock-head"><span class="codeblock-lang">mail header</span></div>
+<pre><code>DKIM-Signature: v=1; a=rsa-sha256; q=dns/txt; c=relaxed/simple; t=1653040363;
+        s=1442393800.kakaocorp; d=kakaocorp.com;
+        h=Date:From:To:Message-ID:Subject:MIME-Version:Content-Type:Content-Transfer-Encoding;
+        bh=OIWy4/drxmhx1T5Di7jTdDpIiikuulwly3PurMLGfcc=;
+        b=Vkhbn59igp9G2ClcE1GmtU8vj8KhV55L6OLaC3NGaIx6z1AQC2jSSrxj0frcrEhb
+        KWB0LktHbIP7j0KjtguQPnTMHaCvhVtLeP4oAbcRIh+KGpJyr+If3/B4KulNvUKwXU5
+        7vrY5rP7t00C8NnhDECudUx3ZdNFUbcByZljP5Xk=</code></pre>
+</div>
+
+<h2>4. DKIM-Signature 헤더 정의</h2>
+<p>DKIM-Signature 구조에 대한 보다 더 자세한 설명은 <strong>RFC 6376</strong> 을 참고하시길 바랍니다.</p>
+
+<div class="table-wrap">
+<table>
+  <thead>
+    <tr><th class="col-narrow">필드</th><th class="col-narrow">필수 여부</th><th class="col-narrow">값</th><th>설명</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>v</code></td><td><span class="badge req">필수</span></td><td class="nowrap"><code>1</code></td><td>버전입니다.</td></tr>
+    <tr><td><code>a</code></td><td><span class="badge req">필수</span></td><td class="nowrap"><code>rsa-sha256</code></td><td>DKIM 서명에 사용되는 알고리즘입니다.</td></tr>
+    <tr><td><code>s</code></td><td><span class="badge req">필수</span></td><td class="nowrap">-</td>
+      <td>지정자(Selector)입니다. 발송 도메인은 여러 개의 DKIM 키를 사용할 수 있습니다.
+        따라서 DKIM-Signature 헤더에서는 이 서명이 어떤 공개 키를 이용해 인증해야 되는지 수신 서버에게 알려주어야 합니다.</td></tr>
+    <tr><td><code>h</code></td><td><span class="badge req">필수</span></td><td class="nowrap">-</td>
+      <td>서명할 헤더(Header)입니다. 헤더들은 콜론(<code>:</code>)으로 구분합니다. <code>From</code> 은 필수값입니다.</td></tr>
+    <tr><td><code>b</code></td><td><span class="badge req">필수</span></td><td class="nowrap">-</td>
+      <td>서명할 헤더(<code>h</code>)에 정의된 헤더들을 서명한 값입니다. Base64 로 인코딩됩니다.</td></tr>
+    <tr><td><code>bh</code></td><td><span class="badge req">필수</span></td><td class="nowrap">-</td>
+      <td>이메일 본문을 서명한 값입니다.</td></tr>
+    <tr><td><code>l</code></td><td><span class="badge opt">선택</span></td><td class="nowrap">-</td>
+      <td>본문 서명(<code>b</code>)에 사용된 본문의 길이입니다. 따로 정의되어 있지 않다면 본문 전체를 사용합니다.</td></tr>
+    <tr><td><code>d</code></td><td><span class="badge req">필수</span></td><td class="nowrap">-</td>
+      <td>도메인입니다. 지정자(<code>s</code>)와 함께 DKIM 서명을 검증하기 위해 DNS 에 DKIM 레코드를 조회할 때 사용됩니다.
+        MAIL FROM(5321.From) 과 From(5322.From) 과 다를 수 있습니다.
+        하지만, 다를 경우 의심스러운 메일로 분류될 수 있습니다.</td></tr>
+    <tr><td><code>t</code></td><td><span class="badge opt">선택</span></td><td class="nowrap">-</td>
+      <td>DKIM 서명 생성 일시입니다. 형식은 유닉스 시간(Unix Time)입니다.</td></tr>
+    <tr><td><code>x</code></td><td><span class="badge opt">선택</span></td><td class="nowrap">-</td>
+      <td>DKIM 서명 만료 일시입니다. 형식은 서명 생성 일시(<code>t</code>)와 같습니다.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>5. DKIM 설정 작업순서</h2>
+<ol>
+  <li><strong>step1.</strong> DKIM 키 생성하기</li>
+  <li><strong>step2.</strong> DKIM 키 등록하기 (DNS TXT 레코드)
+    <ul><li>레코드 검증 <a href="https://mxtoolbox.com/dkim.aspx">https://mxtoolbox.com/dkim.aspx</a> 등 이용 가능</li></ul>
+  </li>
+  <li><strong>step3.</strong> MIME 생성시 <code>DKIM-Signature</code> 헤더 추가 하기</li>
+  <li><strong>step4.</strong> 검증하기
+    <ul><li>gmail.com 으로 메일발송 후 원본보기에서 <code>dkim=pass</code> 확인 (예시)</li></ul>
+  </li>
+</ol>
+
+<h3>1) kakaocorp.com 도메인을 사용하는 경우</h3>
+<p>아래 작업만 진행합니다.</p>
+<ul>
+  <li>step1~2번 작업은 생략 (이미 생성되어 있는 키 사용), <strong>step3~4번만 진행</strong></li>
+  <li>step3 진행시, 아래 정보 사용
+    <ul>
+      <li>DKIM 메일작성방법(JAVA): <a href="https://wiki.daumkakao.com/pages/viewpage.action?pageId=409690013">사내 위키</a> 참고</li>
+      <li><code>selector</code>: <code>1442393800.kakaocorp</code></li>
+      <li><code>domain</code>: <code>kakaocorp.com</code></li>
+      <li><code>v</code>: <code>1</code></li>
+      <li><code>a</code>: <code>ras-sha256</code></li>
+      <li><code>q</code>: <code>dns/txt</code></li>
+      <li><code>c</code>: <code>relaxed/simple</code></li>
+    </ul>
+  </li>
+  <li><strong>private key 파일</strong>은 [문의] 다음메일 문의/제안/버그리포팅 아지트에서 글양식 “<strong>KMH private key</strong>”로 요청주시면 전달드림
+    (메일개발팀 <code>connor.axz</code> 에게 요청)</li>
+</ul>
+
+<p>현재 등록된 DNS TXT 레코드 정보:</p>
+<div class="codeblock">
+  <div class="codeblock-head"><span class="codeblock-lang">shell</span></div>
+<pre><code>$ dig txt 1442393800.kakaocorp._domainkey.kakaocorp.com +short
+"v=DKIM1; t=s; p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDT2utqR8SPxR5QOeOtiMTRQ85RM4bTyZ3VY8ZSsSr0PIe+6
+/DZYcMEDfUc2
+/uGrDPddvhePyCK5Hf2lAyHt8hELn7qwnXmtFvtrIrmIe0261NZy+g9kjJtdhHEXw+4wUxmjDzJf9buBu7z4qEoDL2A1mjtKpqrTqDjejFwqu9dpwIDAQAB"</code></pre>
+</div>
+
+<h3>2) 공동체 자체 도메인을 사용하는 경우</h3>
+<ul>
+  <li><strong>step1~4번 작업을 순서대로 진행</strong></li>
+  <li>DKIM 키 생성 및 DNS TXT 레코드 등록:
+    <a href="https://dkim.org/specs/rfc4871-dkimbase.html">https://dkim.org/specs/rfc4871-dkimbase.html</a> 참고</li>
+  <li>DKIM 메일작성방법(JAVA): <a href="https://wiki.daumkakao.com/pages/viewpage.action?pageId=409690013">사내 위키</a> 참고</li>
+</ul>
+
+<div class="callout info">
+  <span class="callout-icon">🔗</span>
+  <div class="callout-body">
+    Java 코드에서 DKIM 을 붙여 발송하는 방법은
+    <a href="/java/dkim">java - DKIM 붙여서 메일 발송 하기</a> 문서를 함께 참고하세요.
+  </div>
+</div>
