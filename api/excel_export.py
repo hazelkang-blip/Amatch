@@ -2,10 +2,10 @@
 정산 결과를 '수식이 적용된' 엑셀(.xlsx)로 생성.
 
 구성
-  - 원본 시트: 원본_AXZ / 원본_SAP / 원본_카카오빌링 / 원본_현금영수증 / 원본_PG
-  - 원본_AXZ 에는 보조 수식열(정산월여부/최종매출인식금액/구다음/대상매출)을 추가
-  - 요약 시트: 요약_AXZ정산 / 요약_PG / 요약_현금영수증 / 요약_세금계산서 / 정산제외
-    · AXZ정산·세금계산서·PG·현금영수증 원본합계는 SUMIFS/SUMIF 수식 → 원본 수정 시 자동 재계산
+  - 원본 시트: 원본_DAUM / 원본_<ERP양식> / 원본_카카오빌링 / 원본_현금영수증 / 원본_PG
+  - 원본_DAUM 에는 보조 수식열(정산월여부/최종매출인식금액/구다음/대상매출)을 추가
+  - 요약 시트: 요약_DAUM정산 / 요약_PG / 요약_현금영수증 / 요약_세금계산서 / 정산제외
+    · DAUM정산·세금계산서·PG·현금영수증 원본합계는 SUMIFS/SUMIF 수식 → 원본 수정 시 자동 재계산
     · 현금영수증 시차보정·카카오 실제발행 등 순수 수식화가 어려운 값은 계산값으로 기입
 """
 import io
@@ -17,7 +17,8 @@ from openpyxl import Workbook
 from openpyxl.utils import get_column_letter
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 
-from reconcile import _read_bytes, clean_id, run_reconciliation
+from reconcile import (_read_bytes, _date_range_str, clean_id, find_request_date_col,
+                       normalize_erp, run_reconciliation)
 
 # ---- 스타일 ----
 HDR_FILL = PatternFill("solid", fgColor="1E293B")
@@ -84,10 +85,9 @@ def build_workbook(*, bill, sap, rec, axz, pg_files=None, target_month_str):
         if c in df_axz.columns:
             df_axz[c] = df_axz[c].fillna("")
 
-    df_sap = _read_bytes(sap["bytes"], sap["name"]); df_sap.columns = df_sap.columns.str.strip()
-    df_sap = df_sap[~df_sap["거래처 1"].astype(str).str.contains("합계|합산|Total", na=False, case=False)].dropna(subset=["거래처 1"])
-    df_sap["선수금"] = pd.to_numeric(df_sap["선수금"].astype(str).str.replace(",", ""), errors="coerce").fillna(0)
-    df_sap["거래처 1"] = df_sap["거래처 1"].apply(clean_id)
+    # 세금계산서 발행 ERP 원본(SAP/더존) → '사업자번호' / '발행금액' 열 추가
+    df_erp_raw = _read_bytes(sap["bytes"], sap["name"]); df_erp_raw.columns = df_erp_raw.columns.str.strip()
+    df_erp, erp_format = normalize_erp(df_erp_raw)
 
     df_bill = _read_bytes(bill["bytes"], bill["name"]); df_bill.columns = df_bill.columns.str.strip()
     df_bill["결제금액"] = pd.to_numeric(df_bill["결제금액"].astype(str).str.replace(",", ""), errors="coerce").fillna(0)
@@ -106,8 +106,8 @@ def build_workbook(*, bill, sap, rec, axz, pg_files=None, target_month_str):
     wb = Workbook()
     wb.remove(wb.active)
 
-    # ---------- 원본_AXZ (+ 보조 수식열) ----------
-    ws = wb.create_sheet("원본_AXZ")
+    # ---------- 원본_DAUM (+ 보조 수식열) ----------
+    ws = wb.create_sheet("원본_DAUM")
     headers, n = _append_df(ws, df_axz)
     last = n + 1  # 마지막 데이터 행
     L_date = _colletter(headers, "거래일시")
@@ -154,18 +154,19 @@ def build_workbook(*, bill, sap, rec, axz, pg_files=None, target_month_str):
 
     L_final = get_column_letter(c_final)
     L_amt = get_column_letter(c_amt)
-    R_amt = f"'원본_AXZ'!${L_amt}$2:${L_amt}${last}"
-    R_final = f"'원본_AXZ'!${L_final}$2:${L_final}${last}"
-    R_method = f"'원본_AXZ'!${L_method}$2:${L_method}${last}"
-    R_tax = f"'원본_AXZ'!${L_tax}$2:${L_tax}${last}"
-    R_biz = f"'원본_AXZ'!${L_biz}$2:${L_biz}${last}"
+    R_amt = f"'원본_DAUM'!${L_amt}$2:${L_amt}${last}"
+    R_final = f"'원본_DAUM'!${L_final}$2:${L_final}${last}"
+    R_method = f"'원본_DAUM'!${L_method}$2:${L_method}${last}"
+    R_tax = f"'원본_DAUM'!${L_tax}$2:${L_tax}${last}"
+    R_biz = f"'원본_DAUM'!${L_biz}$2:${L_biz}${last}"
 
-    # ---------- 원본_SAP / 카카오빌링 / 현금영수증 / PG ----------
-    ws_sap = wb.create_sheet("원본_SAP")
-    h_sap, n_sap = _append_df(ws_sap, df_sap)
-    L_sbiz = _colletter(h_sap, "거래처 1"); L_sadv = _colletter(h_sap, "선수금")
-    R_sbiz = f"'원본_SAP'!${L_sbiz}$2:${L_sbiz}${n_sap+1}"
-    R_sadv = f"'원본_SAP'!${L_sadv}$2:${L_sadv}${n_sap+1}"
+    # ---------- 원본_<ERP양식> / 카카오빌링 / 현금영수증 / PG ----------
+    erp_sheet = f"원본_{erp_format}"
+    ws_erp = wb.create_sheet(erp_sheet)
+    h_erp, n_erp = _append_df(ws_erp, df_erp)
+    L_sbiz = _colletter(h_erp, "사업자번호"); L_sadv = _colletter(h_erp, "발행금액")
+    R_sbiz = f"'{erp_sheet}'!${L_sbiz}$2:${L_sbiz}${n_erp+1}"
+    R_sadv = f"'{erp_sheet}'!${L_sadv}$2:${L_sadv}${n_erp+1}"
 
     ws_bill = wb.create_sheet("원본_카카오빌링")
     h_bill, n_bill = _append_df(ws_bill, df_bill)
@@ -184,9 +185,9 @@ def build_workbook(*, bill, sap, rec, axz, pg_files=None, target_month_str):
     tax_types = [t for t in pd.unique(df_axz["세금유형"]) if str(t).strip()]
     methods = [m for m in pd.unique(df_axz["결제수단"]) if str(m).strip()]
 
-    # ---------- 요약_AXZ정산 (SUMIFS 피벗, 대상매출 기준) ----------
-    wsx = wb.create_sheet("요약_AXZ정산")
-    _title(wsx, 1, f"AXZ 정산 요약 (정산월 {tm}, 구다음 제외 · 원본_AXZ 수식 참조)")
+    # ---------- 요약_DAUM정산 (SUMIFS 피벗, 대상매출 기준) ----------
+    wsx = wb.create_sheet("요약_DAUM정산")
+    _title(wsx, 1, f"DAUM 정산 요약 (정산월 {tm}, 구다음 제외 · 원본_DAUM 수식 참조)")
     hr = 3
     wsx.cell(row=hr, column=1, value="결제수단").font = BOLD
     for j, t in enumerate(tax_types):
@@ -212,35 +213,53 @@ def build_workbook(*, bill, sap, rec, axz, pg_files=None, target_month_str):
     for cell in wsx[trow]:
         cell.fill = TOTAL_FILL
 
-    # ---------- 요약_세금계산서 (AXZ SUMIFS vs SAP SUMIF) ----------
+    # ---------- 요약_세금계산서 (DAUM SUMIFS vs ERP SUMIF) ----------
+    # 신청일자는 대사에 쓰지 않는 참고열 — 계산값으로 기입한다.
     wst = wb.create_sheet("요약_세금계산서")
-    _title(wst, 1, "세금계산서 대사 (AXZ 대상매출 vs SAP 선수금 · 수식)")
-    biz_axz = df_axz[(df_axz["세금유형"] == "세금계산서")]["사업자번호"].apply(clean_id)
-    biz_list = sorted(set([b for b in biz_axz if b]) | set([b for b in df_sap["거래처 1"] if b]))
+    _title(wst, 1, f"세금계산서 대사 (DAUM 대상매출 vs {erp_format} 발행금액 · 수식)")
+    df_tax_axz = df_axz[df_axz["세금유형"] == "세금계산서"].copy()
+    df_tax_axz["사업자번호"] = df_tax_axz["사업자번호"].apply(clean_id)
+    biz_list = sorted(set([b for b in df_tax_axz["사업자번호"] if b]) | set([b for b in df_erp["사업자번호"] if b]))
+
+    erp_dates = df_erp.groupby("사업자번호")["신청일자"].apply(_date_range_str).to_dict()
+    daum_req_col = find_request_date_col(df_tax_axz.columns)
+    daum_dates = (df_tax_axz.groupby("사업자번호")[daum_req_col].apply(_date_range_str).to_dict()
+                  if daum_req_col else {})
+
+    date_hdrs = ([f"신청일자(DAUM)"] if daum_req_col else []) + [f"신청일자({erp_format})"]
+    hdrs = ["사업자번호"] + date_hdrs + ["DAUM(대상매출)", f"{erp_format}(발행금액)", "차액"]
+    c_daum = 2 + len(date_hdrs)          # DAUM(대상매출) 열 번호
+    c_erp, c_diff = c_daum + 1, c_daum + 2
+    L_daum, L_erp = get_column_letter(c_daum), get_column_letter(c_erp)
+
     hr = 3
-    for j, h in enumerate(["사업자번호", "AXZ(대상매출)", "SAP(선수금)", "차액"]):
+    for j, h in enumerate(hdrs):
         wst.cell(row=hr, column=1 + j, value=h).font = BOLD
     for i, b in enumerate(biz_list):
         r = hr + 1 + i
         wst.cell(row=r, column=1, value=b)
-        wst.cell(row=r, column=2,
+        col = 2
+        if daum_req_col:
+            wst.cell(row=r, column=col, value=daum_dates.get(b, "-")); col += 1
+        wst.cell(row=r, column=col, value=erp_dates.get(b, "-"))
+        wst.cell(row=r, column=c_daum,
                  value=f'=SUMIFS({R_amt},{R_tax},"세금계산서",{R_biz},$A{r})').number_format = WON_FMT
-        wst.cell(row=r, column=3, value=f'=SUMIF({R_sbiz},$A{r},{R_sadv})').number_format = WON_FMT
-        wst.cell(row=r, column=4, value=f"=B{r}-C{r}").number_format = WON_FMT
+        wst.cell(row=r, column=c_erp, value=f'=SUMIF({R_sbiz},$A{r},{R_sadv})').number_format = WON_FMT
+        wst.cell(row=r, column=c_diff, value=f"={L_daum}{r}-{L_erp}{r}").number_format = WON_FMT
     trow = hr + 1 + len(biz_list)
     wst.cell(row=trow, column=1, value="합계").font = BOLD
-    for col in (2, 3, 4):
+    for col in (c_daum, c_erp, c_diff):
         cl = get_column_letter(col)
         c = wst.cell(row=trow, column=col, value=f"=SUM({cl}{hr+1}:{cl}{trow-1})")
         c.number_format = WON_FMT; c.font = BOLD
     for cell in wst[trow]:
         cell.fill = TOTAL_FILL
 
-    # ---------- 요약_PG (AXZ 결제수단별 SUMIFS + 빌링 캐시구분별 SUMIF) ----------
+    # ---------- 요약_PG (DAUM 결제수단별 SUMIFS + 빌링 캐시구분별 SUMIF) ----------
     wsp = wb.create_sheet("요약_PG")
-    _title(wsp, 1, "PG 요약 (AXZ 결제수단별 · 카카오빌링 캐시구분별 · 수식)")
+    _title(wsp, 1, "PG 요약 (DAUM 결제수단별 · 카카오빌링 캐시구분별 · 수식)")
     hr = 3
-    wsp.cell(row=hr, column=1, value="[AXZ 결제수단별 대상매출]").font = BOLD
+    wsp.cell(row=hr, column=1, value="[DAUM 결제수단별 대상매출]").font = BOLD
     for i, m in enumerate(methods):
         r = hr + 1 + i
         wsp.cell(row=r, column=1, value=m)
@@ -268,7 +287,7 @@ def build_workbook(*, bill, sap, rec, axz, pg_files=None, target_month_str):
     wsr = wb.create_sheet("요약_현금영수증")
     _title(wsr, 1, "현금영수증 대사")
 
-    # 소거/합산 산출근거: 아래 상세표(사유=F, AXZ=C, 카카오원본=D)를 SUMIF 로 참조
+    # 소거/합산 산출근거: 아래 상세표(사유=G, DAUM=D, 카카오원본=E)를 SUMIF 로 참조
     err = pd.DataFrame(res["err_rec"])
     # 상세표 정렬: 소거·합산(시차보정) 먼저, 기타 확인 필요는 뒤로
     if not err.empty and "사유" in err.columns:
@@ -278,7 +297,7 @@ def build_workbook(*, bill, sap, rec, axz, pg_files=None, target_month_str):
     DET_START = DET_HDR + 1
     n_err = len(err)
     DET_END = DET_START + n_err - 1 if n_err else DET_START
-    # 상세표 열: A=거래일시 B=발행일시 C=계정ID D=AXZ E=카카오원본 F=차액 G=사유
+    # 상세표 열: A=거래일시 B=발행일시 C=계정ID D=DAUM E=카카오원본 F=차액 G=사유
     rng_reason = f"G{DET_START}:G{DET_END}"
     rng_axz = f"D{DET_START}:D{DET_END}"
     rng_kakao = f"E{DET_START}:E{DET_END}"
@@ -289,13 +308,13 @@ def build_workbook(*, bill, sap, rec, axz, pg_files=None, target_month_str):
         sogo_val = -summ["end_of_month_sum"]
         hapsan_val = summ["prev_month_end_sum"]
 
-    # AXZ 원본합계는 수식(현금영수증+자진발급, 최종매출인식금액 기준 · 구다음 포함 = 원본 로직과 동일)
+    # DAUM 원본합계는 수식(현금영수증+자진발급, 최종매출인식금액 기준 · 구다음 포함 = 원본 로직과 동일)
     rows = [
-        ("AXZ 현금영수증 원본합계(수식)",
+        ("DAUM 현금영수증 원본합계(수식)",
          f'=SUMIFS({R_final},{R_tax},"현금영수증")+SUMIFS({R_final},{R_tax},"자진발급")', True),
         ("(-) 익월 발행 예정건 (소거)", sogo_val, False),
         ("(+) 전월 말일 결제건 (합산)", hapsan_val, False),
-        ("보정된 AXZ 대상 총액", None, "calc_adj"),
+        ("보정된 DAUM 대상 총액", None, "calc_adj"),
         ("카카오 실제 발행액", summ["total_k_rec"], False),
         ("최종 발행 차액", None, "calc_diff"),
     ]
@@ -318,7 +337,7 @@ def build_workbook(*, bill, sap, rec, axz, pg_files=None, target_month_str):
 
     # ---- 소거/합산 산출근거 상세표 ----
     _title(wsr, DET_HDR - 1, "■ 소거 / 합산 산출근거 (현금영수증 대사 상세)")
-    det_cols = ["거래일시", "발행일시", "계정 ID", "AXZ", "카카오원본", "차액", "사유"]
+    det_cols = ["거래일시", "발행일시", "계정 ID", "DAUM", "카카오원본", "차액", "사유"]
     for j, h in enumerate(det_cols):
         wsr.cell(row=DET_HDR, column=1 + j, value=h).font = BOLD
     if n_err:
@@ -327,7 +346,7 @@ def build_workbook(*, bill, sap, rec, axz, pg_files=None, target_month_str):
             wsr.cell(row=ri, column=1, value=r.get("거래일시"))
             wsr.cell(row=ri, column=2, value=r.get("발행일시"))
             wsr.cell(row=ri, column=3, value=r.get("계정 ID"))
-            for cj, key in ((4, "AXZ"), (5, "카카오원본"), (6, "차액")):
+            for cj, key in ((4, "DAUM"), (5, "카카오원본"), (6, "차액")):
                 c = wsr.cell(row=ri, column=cj, value=r.get(key))
                 c.number_format = WON_FMT
             wsr.cell(row=ri, column=7, value=r.get("사유"))
@@ -338,7 +357,7 @@ def build_workbook(*, bill, sap, rec, axz, pg_files=None, target_month_str):
     wse = wb.create_sheet("정산제외")
     _title(wse, 1, "정산 제외 (구다음메일 결제건)")
     old = pd.DataFrame(res["old_daum"])
-    _title(wse, 2, "AXZ 결제내역 (비고/상품명에 '구다음' 포함)")
+    _title(wse, 2, "DAUM 결제내역 (비고/상품명에 '구다음' 포함)")
     if not old.empty:
         _append_df_at(wse, old, start_row=3)
         next_row = 3 + len(old) + 3

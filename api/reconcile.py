@@ -8,6 +8,7 @@ AMatch 정산 대사 핵심 로직.
 """
 import io
 import math
+import re
 from datetime import datetime
 
 import numpy as np
@@ -24,6 +25,71 @@ def clean_id(val):
     if s.endswith(".0"):
         s = s[:-2]
     return s
+
+
+# ----------------------------------------------------------------------------
+# 세금계산서 발행 ERP 원본 정규화
+#   SAP    : '거래처 1' = 사업자발급번호, '선수금' = 발행금액(공급대가),
+#             '전기일' = 세금계산서 신청일자
+#   더존    : '품의내역' 괄호 안 숫자 = 사업자발급번호,
+#             '장부금액'(= '거래금액') = 발행금액. 별도 판매금액(공급가) 열은 없음.
+#             '회계일자' = 세금계산서 신청일자
+#   두 양식 모두 취소분은 음수로 노출되므로 부호 그대로 합산한다.
+# ----------------------------------------------------------------------------
+_BIZ_IN_PAREN = re.compile(r"\(([0-9][0-9\-]*)\)")
+
+
+def _biz_from_note(text):
+    """더존 '품의내역'에서 괄호 안 사업자발급번호 추출 (마지막 괄호 기준)."""
+    found = _BIZ_IN_PAREN.findall(str(text))
+    return found[-1] if found else ""
+
+
+def _date_range_str(series):
+    """날짜 시리즈 -> 'YYYY-MM-DD' 또는 'YYYY-MM-DD ~ YYYY-MM-DD' (없으면 '-')."""
+    d = pd.to_datetime(pd.Series(series), errors="coerce").dropna()
+    if d.empty:
+        return "-"
+    lo, hi = d.min().strftime("%Y-%m-%d"), d.max().strftime("%Y-%m-%d")
+    return lo if lo == hi else f"{lo} ~ {hi}"
+
+
+def find_request_date_col(columns):
+    """세금계산서 '신청일자' 성격의 열 이름을 찾는다 (예: '세금계산서 신청일자')."""
+    return next((c for c in columns if "신청" in str(c) and "일" in str(c)), None)
+
+
+def normalize_erp(df):
+    """ERP 원본(SAP/더존) -> ['사업자번호', '발행금액', '신청일자'] 열이 추가된 DataFrame, 양식명."""
+    df = df.copy()
+    df.columns = df.columns.str.strip()
+
+    if "거래처 1" in df.columns and "선수금" in df.columns:
+        erp_format = "SAP"
+        biz = df["거래처 1"].apply(clean_id)
+        amt = df["선수금"]
+        date_cands = ("전기일", "증빙일")
+    elif "품의내역" in df.columns:
+        erp_format = "더존"
+        amt_col = next((c for c in ("장부금액", "거래금액") if c in df.columns), None)
+        if amt_col is None:
+            raise KeyError("장부금액 (또는 거래금액)")
+        biz = df["품의내역"].apply(_biz_from_note).apply(clean_id)
+        amt = df[amt_col]
+        date_cands = ("회계일자",)
+    else:
+        raise KeyError("거래처 1 / 품의내역 (인식 가능한 ERP 양식이 아닙니다)")
+
+    df["사업자번호"] = biz
+    df["발행금액"] = pd.to_numeric(amt.astype(str).str.replace(",", ""), errors="coerce").fillna(0)
+    # 세금계산서 신청일자 (더존 '회계일자' = 신청일자). 없으면 NaT.
+    date_col = next((c for c in date_cands if c in df.columns), None)
+    df["신청일자"] = pd.to_datetime(df[date_col], errors="coerce") if date_col else pd.NaT
+
+    # 합계/총계 행 제거: 사업자번호가 비었거나(더존 총계행·SAP 합계행) 합계 텍스트인 행
+    df = df[~df["사업자번호"].str.contains("합계|합산|Total", na=False, case=False)]
+    df = df[df["사업자번호"] != ""]
+    return df.reset_index(drop=True), erp_format
 
 
 def _read_bytes(file_bytes, filename):
@@ -206,7 +272,7 @@ def run_reconciliation(*, bill, sap, rec, axz, pg_files=None, target_month_str):
     a_rec = raw_axz_rec_df.groupby("User ID").agg({"최종매출인식금액": "sum", "거래일시": "max"}).reset_index()
     m_rec = pd.merge(a_rec, k_rec_sum, left_on="User ID", right_on="계정ID_clean", how="outer")
     # 금액·ID 컬럼만 0으로 채우고, 날짜(거래일시/카카오일시)는 NaT 유지 →
-    # combine_first 가 AXZ 없는 건에서 카카오 승인일시로 정상 폴백하도록 함
+    # combine_first 가 DAUM 없는 건에서 카카오 승인일시로 정상 폴백하도록 함
     _fill0 = [c for c in ["최종매출인식금액", "보정액", "_취소건수", "User ID", "계정ID_clean", "채널"] if c in m_rec.columns]
     m_rec[_fill0] = m_rec[_fill0].fillna(0)
     m_rec["ID_Display"] = m_rec["User ID"].replace(0, np.nan).combine_first(m_rec["계정ID_clean"].replace(0, np.nan))
@@ -214,7 +280,7 @@ def run_reconciliation(*, bill, sap, rec, axz, pg_files=None, target_month_str):
     for col in ["거래일시", "카카오일시"]:
         if col in m_rec.columns:
             m_rec[col] = pd.to_datetime(m_rec[col], errors="coerce")
-    # 거래일시(AXZ 결제일)와 발행일시(카카오 승인일시)를 각각 표시 — 소거/합산 판별을 눈으로 구분
+    # 거래일시(DAUM 결제일)와 발행일시(카카오 승인일시)를 각각 표시 — 소거/합산 판별을 눈으로 구분
     m_rec["거래일시_str"] = m_rec["거래일시"].dt.strftime("%Y-%m-%d %H:%M").fillna("-")
     if "카카오일시" in m_rec.columns:
         m_rec["발행일시_str"] = m_rec["카카오일시"].dt.strftime("%Y-%m-%d %H:%M").fillna("-")
@@ -241,15 +307,15 @@ def run_reconciliation(*, bill, sap, rec, axz, pg_files=None, target_month_str):
 
     def get_reason(row):
         axz, kakao = row["최종매출인식금액"], row["보정액"]
-        # 결제내역 상태 확인필요: 카카오는 결제취소를 반영(순액 차감)했으나 AXZ 결제내역엔 취소 미반영
-        # → AXZ 인식액이 카카오 실제 순액보다 큼. 결제내역 추출 후 취소된 건으로 AXZ 상태 갱신 필요.
+        # 결제내역 상태 확인필요: 카카오는 결제취소를 반영(순액 차감)했으나 DAUM 결제내역엔 취소 미반영
+        # → DAUM 인식액이 카카오 실제 순액보다 큼. 결제내역 추출 후 취소된 건으로 DAUM 상태 갱신 필요.
         if row.get("_취소건수", 0) > 0 and axz > kakao:
             return "결제내역 상태 확인필요"
-        # 익월 발행 예정건(소거): AXZ 거래일시(결제일)가 정산월 '말일' & 카카오 발행 없음
+        # 익월 발행 예정건(소거): DAUM 거래일시(결제일)가 정산월 '말일' & 카카오 발행 없음
         # → 발행이 익월 1일로 넘어가 정산월 rec 에 없음
         if axz == 34900 and kakao == 0 and _is_day(row.get("거래일시"), _last_day):
             return "익월 발행 예정건 (소거)"
-        # 전월 말일 결제건(합산): 카카오 발행일시(승인일시)가 정산월 '1일' & AXZ 결제내역 없음
+        # 전월 말일 결제건(합산): 카카오 발행일시(승인일시)가 정산월 '1일' & DAUM 결제내역 없음
         # → 전월 말일 결제분이 정산월 1일에 발행되어 정산월 rec 에만 존재
         if axz == 0 and kakao == 34900 and _is_day(row.get("카카오일시"), _first_day):
             return "전월 말일 결제건 (합산)"
@@ -267,15 +333,32 @@ def run_reconciliation(*, bill, sap, rec, axz, pg_files=None, target_month_str):
 
     adjusted_axz_rec = raw_total_axz_rec - end_of_month_sum + prev_month_end_sum
 
-    # 3. SAP 대사
-    df_sap = df_sap[~df_sap["거래처 1"].astype(str).str.contains("합계|합산|Total", na=False, case=False)].dropna(subset=["거래처 1"])
-    df_sap["선수금"] = pd.to_numeric(df_sap["선수금"].astype(str).str.replace(",", ""), errors="coerce").fillna(0)
-    df_sap["거래처 1"] = df_sap["거래처 1"].apply(clean_id)
-    a_tax = df_axz_target[df_axz_target["세금유형"] == "세금계산서"].groupby("사업자번호")["최종매출인식금액"].sum().reset_index()
-    s_tax = df_sap.groupby("거래처 1")["선수금"].sum().reset_index()
-    m_tax = pd.merge(a_tax, s_tax, left_on="사업자번호", right_on="거래처 1", how="outer").fillna(0)
-    m_tax["사업자_통합"] = m_tax["사업자번호"].replace(["", "nan"], np.nan).combine_first(m_tax["거래처 1"].replace(["", "nan"], np.nan))
-    m_tax["차액"] = m_tax["최종매출인식금액"] - m_tax["선수금"]
+    # 3. 세금계산서(ERP) 대사 — SAP / 더존 양식 자동 인식
+    # 신청일자는 대사 계산에 쓰지 않고 참고용으로만 나란히 표시한다
+    # (더존 '회계일자' = 신청일자, DAUM 결제내역에 신청일자 열이 생기면 자동 인식).
+    df_erp, erp_format = normalize_erp(df_sap)
+    df_a_tax = df_axz_target[df_axz_target["세금유형"] == "세금계산서"]
+    daum_req_col = find_request_date_col(df_a_tax.columns)
+
+    a_agg = {"최종매출인식금액": ("최종매출인식금액", "sum")}
+    if daum_req_col:
+        a_agg["신청일자_DAUM"] = (daum_req_col, _date_range_str)
+    a_tax = df_a_tax.groupby("사업자번호").agg(**a_agg).reset_index()
+
+    s_tax = df_erp.groupby("사업자번호").agg(
+        발행금액=("발행금액", "sum"), 신청일자_ERP=("신청일자", _date_range_str),
+    ).reset_index().rename(columns={"사업자번호": "사업자번호_ERP"})
+
+    m_tax = pd.merge(a_tax, s_tax, left_on="사업자번호", right_on="사업자번호_ERP", how="outer")
+    _num_cols = ["최종매출인식금액", "발행금액"]
+    m_tax[_num_cols] = m_tax[_num_cols].fillna(0)
+    for _dc in ["신청일자_DAUM", "신청일자_ERP"]:
+        if _dc in m_tax.columns:
+            m_tax[_dc] = m_tax[_dc].fillna("-")
+    # 한쪽에만 있는 사업자번호는 결측이므로 반대쪽 값으로 폴백
+    _blank = ["", "nan", 0]
+    m_tax["사업자_통합"] = m_tax["사업자번호"].replace(_blank, np.nan).combine_first(m_tax["사업자번호_ERP"].replace(_blank, np.nan))
+    m_tax["차액"] = m_tax["최종매출인식금액"] - m_tax["발행금액"]
     err_tax = m_tax[m_tax["차액"] != 0]
 
     # 4. 피벗
@@ -293,23 +376,31 @@ def run_reconciliation(*, bill, sap, rec, axz, pg_files=None, target_month_str):
     # 표시용 가공
     if not mismatch_pg.empty:
         mismatch_pg_disp = mismatch_pg[["ID_Final", "결제수단", "최종매출인식금액", "금액", "상세차액_원본"]].rename(
-            columns={"ID_Final": "결제번호", "최종매출인식금액": "AXZ", "금액": "카카오원본", "상세차액_원본": "차액"})
+            columns={"ID_Final": "결제번호", "최종매출인식금액": "DAUM", "금액": "카카오원본", "상세차액_원본": "차액"})
     else:
-        mismatch_pg_disp = pd.DataFrame(columns=["결제번호", "결제수단", "AXZ", "카카오원본", "차액"])
+        mismatch_pg_disp = pd.DataFrame(columns=["결제번호", "결제수단", "DAUM", "카카오원본", "차액"])
 
     if not err_rec.empty:
         err_rec_disp = err_rec[["거래일시_str", "발행일시_str", "ID_Display", "최종매출인식금액", "보정액", "차액", "사유"]].rename(
-            columns={"거래일시_str": "거래일시", "발행일시_str": "발행일시", "ID_Display": "계정 ID", "최종매출인식금액": "AXZ", "보정액": "카카오원본"})
+            columns={"거래일시_str": "거래일시", "발행일시_str": "발행일시", "ID_Display": "계정 ID", "최종매출인식금액": "DAUM", "보정액": "카카오원본"})
         reasons = list(pd.unique(err_rec["사유"]))
     else:
-        err_rec_disp = pd.DataFrame(columns=["거래일시", "발행일시", "계정 ID", "AXZ", "카카오원본", "차액", "사유"])
+        err_rec_disp = pd.DataFrame(columns=["거래일시", "발행일시", "계정 ID", "DAUM", "카카오원본", "차액", "사유"])
         reasons = []
 
+    # 표시 컬럼: 사업자번호 · (신청일자 참고열) · DAUM 인식액 · ERP 발행액 · 차액
+    erp_amt_label = f"{erp_format} 원본"
+    tax_cols, tax_ren = ["사업자_통합"], {"사업자_통합": "사업자번호", "발행금액": erp_amt_label}
+    if daum_req_col:
+        tax_cols.append("신청일자_DAUM"); tax_ren["신청일자_DAUM"] = "신청일자(DAUM)"
+    tax_cols.append("신청일자_ERP"); tax_ren["신청일자_ERP"] = f"신청일자({erp_format})"
+    tax_cols += ["최종매출인식금액", "발행금액", "차액"]
+    err_tax_columns = [tax_ren.get(c, c) for c in tax_cols]
+
     if not err_tax.empty:
-        err_tax_disp = err_tax[["사업자_통합", "최종매출인식금액", "선수금", "차액"]].rename(
-            columns={"사업자_통합": "사업자번호", "선수금": "SAP 원본"})
+        err_tax_disp = err_tax[tax_cols].rename(columns=tax_ren)
     else:
-        err_tax_disp = pd.DataFrame(columns=["사업자번호", "최종매출인식금액", "SAP 원본", "차액"])
+        err_tax_disp = pd.DataFrame(columns=err_tax_columns)
 
     if not df_old_daum.empty:
         old_daum_disp = df_old_daum[["거래일시", "결제수단", "결제상태", "User ID", "결제ID", "상품명", "세금유형", "최종매출인식금액"]].copy()
@@ -335,6 +426,7 @@ def run_reconciliation(*, bill, sap, rec, axz, pg_files=None, target_month_str):
     result = {
         "target_month": target_month_str,
         "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "erp_format": erp_format,
         "summary": {
             "total_axz": total_axz,
             "total_k_bill": total_k_bill,
@@ -351,6 +443,8 @@ def run_reconciliation(*, bill, sap, rec, axz, pg_files=None, target_month_str):
         "err_rec": _records(err_rec_disp),
         "err_rec_reasons": reasons,
         "err_tax": _records(err_tax_disp),
+        "err_tax_columns": err_tax_columns,
+        "err_tax_money_columns": ["최종매출인식금액", erp_amt_label, "차액"],
         "old_daum": _records(old_daum_disp),
         "old_daum_rec": _records(old_daum_rec_disp),
         "pivot_all": _pivot_payload(pivot_all),

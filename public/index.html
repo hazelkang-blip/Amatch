@@ -117,11 +117,11 @@
           <h3 style="margin-top:0">📍 필수 데이터</h3>
           <label class="fld">1. 카카오 빌링 전체 (요약본)</label>
           <input type="file" id="f-bill" accept=".csv,.xlsx" />
-          <label class="fld">2. SAP 데이터</label>
+          <label class="fld">2. 더존 세금계산서 발행 데이터</label>
           <input type="file" id="f-sap" accept=".csv,.xlsx" />
           <label class="fld">3. 카카오 현금영수증 데이터</label>
           <input type="file" id="f-rec" accept=".csv,.xlsx" />
-          <label class="fld">4. AXZ 내부결제 데이터</label>
+          <label class="fld">4. DAUM 내부결제 데이터</label>
           <input type="file" id="f-axz" accept=".csv,.xlsx" />
         </div>
         <div class="col card">
@@ -234,14 +234,14 @@ function renderDashboard() {
   const mdStr = (md > 0 ? "+" : "") + num(md) + "원";
   const dr = s.diff_rec, drStr = (dr > 0 ? "+" : "") + num(dr) + "원";
 
-  const tabs = ["📊 AXZ 정산", "🔄 PG", "🧾 현금영수증", "🏢 세금계산서", "💡 정산 제외"];
+  const tabs = ["📊 DAUM 정산", "🔄 PG", "🧾 현금영수증", "🏢 세금계산서", "💡 정산 제외"];
   let h = `<div class="card" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.5rem">
       <div><strong>정산 대상월: ${esc(d.target_month)}</strong> <span class="muted">· 생성 ${esc(d.generated_at || "")}</span></div>
       <button class="btn-primary btn-sm" style="width:auto" id="btn-export" onclick="exportExcel()">📊 엑셀 다운로드</button>
     </div>`;
 
   h += `<h3>📊 정산 총괄 요약</h3><div class="metrics">
-    ${metric("AXZ 최종매출인식금액", won(s.total_axz))}
+    ${metric("DAUM 최종매출인식금액", won(s.total_axz))}
     ${metric("카카오 빌링 합계", won(s.total_k_bill))}
     ${metric("최종 차액", mdStr, { delta: mdStr, deltaColor: md > 0 ? "red" : md < 0 ? "blue" : "gray" })}
   </div>`;
@@ -265,32 +265,36 @@ function renderTab() {
   } else if (activeTab === 1) {
     b.innerHTML = `<h3>결제유형별 PG 요약</h3>${pivotTable({ columns: ["결제유형", "최종매출인식금액", "결제금액", "차액"], rows: d.pg_summary })}
       <h3>결제번호 기준 상세 불일치 (원본 대사)</h3>
-      ${recordsTable(d.mismatch_pg, ["결제번호", "결제수단", "AXZ", "카카오원본", "차액"],
-        { moneyCols: ["AXZ", "카카오원본", "차액"], colorCols: ["차액"], emptyMsg: "상세 내역이 일치합니다." })}`;
+      ${recordsTable(d.mismatch_pg, ["결제번호", "결제수단", "DAUM", "카카오원본", "차액"],
+        { moneyCols: ["DAUM", "카카오원본", "차액"], colorCols: ["차액"], emptyMsg: "상세 내역이 일치합니다." })}`;
   } else if (activeTab === 2) {
     const pm = s.prev_month_end_sum;
-    b.innerHTML = `<p><strong>1단계: AXZ 대상액 보정 (시차 결제건 조정)</strong></p>
+    b.innerHTML = `<p><strong>1단계: DAUM 대상액 보정 (시차 결제건 조정)</strong></p>
       <div class="metrics">
-        ${metric("AXZ 전체(원본)", won(s.raw_total_axz_rec))}
+        ${metric("DAUM 전체(원본)", won(s.raw_total_axz_rec))}
         ${metric("익월 발행 예정건 (소거)", "-" + won(s.end_of_month_sum), { valColor: "#0ea5e9", help: "정산월 말일 결제 후 익월 1일자 자진신고 처리될 거래로 정산월 증빙에서 제외" })}
         ${metric("전월 말일 결제건 (합산)", (pm >= 0 ? "+" : "") + won(pm), { valColor: pm >= 0 ? "#ef4444" : "#0ea5e9", help: "전월 말일 결제 후 정산월 1일 자진발급된 건으로 이번 달에 합산" })}
-        ${metric("보정된 AXZ 대상 총액", won(s.adjusted_axz_rec))}
+        ${metric("보정된 DAUM 대상 총액", won(s.adjusted_axz_rec))}
       </div>
       <p><strong>2단계: 카카오 실제 발행액 비교</strong></p>
       <div class="metrics">
-        ${metric("보정된 AXZ 대상 (AXZ)", won(s.adjusted_axz_rec))}
+        ${metric("보정된 DAUM 대상 (DAUM)", won(s.adjusted_axz_rec))}
         ${metric("카카오 실제 발행 (카카오)", won(s.total_k_rec))}
         ${metric("최종 발행 차액", (s.diff_rec > 0 ? "+" : "") + won(s.diff_rec), { delta: (s.diff_rec > 0 ? "+" : "") + num(s.diff_rec) + "원", deltaColor: s.diff_rec > 0 ? "red" : s.diff_rec < 0 ? "blue" : "gray" })}
       </div>
       <h3>건별 상세 불일치</h3>
       ${recRecTable(d)}`;
   } else if (activeTab === 3) {
-    b.innerHTML = `<h3>세금계산서 불일치 (AXZ vs SAP)</h3>
-      ${recordsTable(d.err_tax, ["사업자번호", "최종매출인식금액", "SAP 원본", "차액"],
-        { moneyCols: ["최종매출인식금액", "SAP 원본", "차액"], colorCols: ["차액"], emptyMsg: "세금계산서 내역이 일치합니다." })}`;
+    // 컬럼 구성(신청일자 참고열 유무 · ERP 양식명)은 서버가 내려준 목록을 그대로 사용
+    const erpName = d.erp_format || "더존";
+    const taxCols = d.err_tax_columns || ["사업자번호", "최종매출인식금액", `${erpName} 원본`, "차액"];
+    const taxMoney = d.err_tax_money_columns || ["최종매출인식금액", `${erpName} 원본`, "차액"];
+    b.innerHTML = `<h3>세금계산서 불일치 (DAUM vs ${esc(erpName)})</h3>
+      ${recordsTable(d.err_tax, taxCols,
+        { moneyCols: taxMoney, colorCols: ["차액"], emptyMsg: "세금계산서 내역이 일치합니다." })}`;
   } else {
     b.innerHTML = `<div class="alert info">💡 <strong>'구다음메일 결제건'</strong> 내역입니다. 정산에서 자동 제외된 내역입니다.</div>
-      <h3>AXZ 결제내역 <span class="muted" style="font-weight:400">(비고/상품명에 '구다음' 포함)</span></h3>
+      <h3>DAUM 결제내역 <span class="muted" style="font-weight:400">(비고/상품명에 '구다음' 포함)</span></h3>
       ${d.old_daum && d.old_daum.length
         ? recordsTable(d.old_daum, ["거래일시", "결제수단", "결제상태", "User ID", "결제ID", "상품명", "세금유형", "최종매출인식금액"], { moneyCols: ["최종매출인식금액"] })
         : '<p class="muted">제외 항목 없음</p>'}
@@ -307,13 +311,13 @@ function recRecTable(d) {
   const adj = d.err_rec.filter(r => ADJ.includes(r["사유"]));
   const status = d.err_rec.filter(r => r["사유"] === "결제내역 상태 확인필요");
   const etc = d.err_rec.filter(r => !ADJ.includes(r["사유"]) && r["사유"] !== "결제내역 상태 확인필요");
-  const cols = ["거래일시", "발행일시", "계정 ID", "AXZ", "카카오원본", "차액", "사유"];
-  const opts = { moneyCols: ["AXZ", "카카오원본", "차액"], colorCols: ["차액"], badgeCol: "사유", badgeMap: REC_BADGE };
+  const cols = ["거래일시", "발행일시", "계정 ID", "DAUM", "카카오원본", "차액", "사유"];
+  const opts = { moneyCols: ["DAUM", "카카오원본", "차액"], colorCols: ["차액"], badgeCol: "사유", badgeMap: REC_BADGE };
   const section = (title, rows, emptyMsg) =>
     `<h4 style="margin:1rem 0 0.5rem">${title} <span class="muted" style="font-weight:400">· ${rows.length}건</span></h4>`
     + (rows.length ? recordsTable(rows, cols, opts) : `<p class="muted">${emptyMsg}</p>`);
   return section("시차보정 대상 (소거 · 합산)", adj, "해당 없음")
-    + section("결제내역 상태 확인필요 (카카오 취소 · AXZ 미반영)", status, "해당 없음")
+    + section("결제내역 상태 확인필요 (카카오 취소 · DAUM 미반영)", status, "해당 없음")
     + section("기타 확인 필요 (대사 불일치 · 별도 검토)", etc, "확인 필요 건 없음");
 }
 
